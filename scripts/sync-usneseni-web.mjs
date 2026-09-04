@@ -21,6 +21,17 @@ const ZDROJE = [
   },
 ];
 
+const pouziteId = new Set();
+/** Zaručí unikátní id i tam, kde má radnice dva záznamy se stejným číslem, datem i názvem. */
+function unikatniId(zaklad) {
+  if (!pouziteId.has(zaklad)) { pouziteId.add(zaklad); return zaklad; }
+  let n = 2;
+  while (pouziteId.has(`${zaklad}#${n}`)) n++;
+  const id = `${zaklad}#${n}`;
+  pouziteId.add(id);
+  return id;
+}
+
 function toUsneseni(rec, organ) {
   const datum = parseDate(pick(rec, 'datum', 'date', 'datumJednani'));
   const cislo = String(pick(rec, 'cislo', 'tag', 'cisloUsneseni', 'number') ?? '').trim();
@@ -32,7 +43,7 @@ function toUsneseni(rec, organ) {
     .flat().map((p) => fileUrl(p)).flat().filter(Boolean);
 
   return {
-    id: `web:${organ}:${cislo || datum}:${hash(nazev)}`,
+    id: unikatniId(`web:${organ}:${cislo || datum}:${hash(nazev)}`),
     organ,
     cislo: cislo || null,
     datum,
