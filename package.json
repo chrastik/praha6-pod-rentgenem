@@ -1,0 +1,23 @@
+{
+  "name": "praha6-pod-rentgenem",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Veřejná data MČ Praha 6 na jednom místě",
+  "scripts": {
+    "sync:usneseni-web": "node scripts/sync-usneseni-web.mjs",
+    "sync:usneseni-marbes": "node scripts/sync-usneseni-marbes.mjs",
+    "sync:zapisy": "node scripts/sync-zapisy.mjs",
+    "sync:finance": "node scripts/sync-finance.mjs",
+    "sync:smlouvy": "node scripts/sync-smlouvy.mjs",
+    "sync:deska": "node scripts/sync-deska.mjs",
+    "merge": "node scripts/merge-usneseni.mjs",
+    "index": "node scripts/build-index.mjs",
+    "validate": "node scripts/validate.mjs",
+    "probe": "node scripts/probe-sources.mjs",
+    "daily": "npm run sync:usneseni-marbes && npm run sync:deska && npm run sync:smlouvy && npm run merge && npm run index && npm run validate"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
