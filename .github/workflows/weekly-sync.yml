@@ -34,8 +34,12 @@ jobs:
       - run: node scripts/merge-usneseni.mjs
       - run: node scripts/build-index.mjs
       - run: node scripts/validate.mjs
+        continue-on-error: false
 
+      # always(): nasbíraná data se commitují i při červené validaci — jinak by
+      # jedna neprošlá kontrola zahodila několik minut scrapování.
       - name: Commit dat
+        if: always()
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

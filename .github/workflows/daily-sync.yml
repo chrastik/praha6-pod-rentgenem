@@ -63,8 +63,10 @@ jobs:
         if: steps.cas.outputs.bezet == 'ano'
         run: node scripts/validate.mjs
 
+      # always(): nasbíraná data se commitují i při červené validaci — jinak by
+      # jedna neprošlá kontrola zahodila několik minut scrapování.
       - name: Commit dat
-        if: steps.cas.outputs.bezet == 'ano'
+        if: always() && steps.cas.outputs.bezet == 'ano'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
