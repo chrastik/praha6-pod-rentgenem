@@ -215,27 +215,55 @@ async function finance() {
     nacti('faktury.json').catch(() => null),
   ]);
   if (!rozpocet && !faktury) {
-    app.innerHTML = `<h1>Peníze</h1><p class="prazdno">Finanční data ještě nebyla načtena.
-      Spusť <code>npm run sync:finance</code>.</p>`;
+    app.innerHTML = `<h1>Peníze</h1><p class="prazdno">Finanční data ještě nebyla načtena.</p>`;
     return;
   }
-  const posledni = (faktury?.items ?? []).slice(0, 50);
+
+  const polozky = faktury?.items ?? [];
+  const rozsah = faktury?.souhrn?.rozsah ?? {};
+
   app.innerHTML = `
     <h1>Peníze</h1>
-    <p class="podnadpis">Položkový rozpočet a jednotlivé faktury z CityVizoru — tohle je
-    nejsilnější datový zdroj Prahy 6.</p>
+    <p class="podnadpis">Položkový rozpočet a jednotlivé faktury z CityVizoru. Faktury
+    jsou účetní výdaje městské části, ne platby jejích příspěvkových organizací.</p>
     <div class="karty">
+      <div><div class="v">${fmtCislo(faktury?.pocet)}</div><div class="k">faktur ${rozsah.od?.slice(0, 4) ?? ''}–${rozsah.do?.slice(0, 4) ?? ''}</div></div>
+      <div><div class="v">${fmtKc(faktury?.souhrn?.celkemVydaje)}</div><div class="k">výdaje celkem</div></div>
       <div><div class="v">${fmtCislo(rozpocet?.roky?.length)}</div><div class="k">ročníků rozpočtu</div></div>
-      <div><div class="v">${fmtCislo(faktury?.pocet)}</div><div class="k">faktur</div></div>
     </div>
+
+    <h2>Největší dodavatelé</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Dodavatel</th><th>Faktur</th><th>Celkem</th></tr></thead>
+      <tbody>${topDodavatele(polozky).map((d) => `
+        <tr><td>${esc(d.nazev)}</td><td class="c">${fmtCislo(d.pocet)}</td><td class="c">${fmtKc(d.suma)}</td></tr>
+      `).join('')}</tbody>
+    </table></div>
+
     <h2>Poslední faktury</h2>
-    <div class="seznam">${posledni.map((f) => `
+    <div class="seznam">${polozky.slice(0, 60).map((f) => `
       <div class="polozka">
-        <div class="meta">${fmtDatum(f.date ?? f.datum)}</div>
-        <div><h3>${esc(f.counterpartyName ?? f.dodavatel ?? 'Neuvedeno')}</h3>
-        <div class="radek"><span>${fmtKc(f.amount ?? f.castka)}</span>
-        <span>${esc(f.description ?? f.popis ?? '')}</span></div></div>
+        <div class="meta">${fmtDatum(f.datum)}</div>
+        <div>
+          <h3>${esc(f.dodavatel ?? 'Neuvedeno')}</h3>
+          <div class="radek">
+            <span>${fmtKc(f.vydaj || f.prijem)}${f.prijem > f.vydaj ? ' příjem' : ''}</span>
+            ${f.popis ? `<span>${esc(f.popis)}</span>` : ''}
+          </div>
+        </div>
       </div>`).join('')}</div>`;
+}
+
+/** Sečte faktury podle dodavatele — nejrychlejší způsob, jak vidět, kam peníze tečou. */
+function topDodavatele(polozky, limit = 15) {
+  const podle = new Map();
+  for (const f of polozky) {
+    const k = f.dodavatel ?? 'Neuvedeno';
+    const z = podle.get(k) ?? { nazev: k, pocet: 0, suma: 0 };
+    z.pocet++; z.suma += f.vydaj ?? 0;
+    podle.set(k, z);
+  }
+  return [...podle.values()].sort((a, b) => b.suma - a.suma).slice(0, limit);
 }
 
 async function smlouvy() {
