@@ -13,9 +13,19 @@ if (!usneseni) {
 } else {
   const items = usneseni.items;
 
-  items.length > 20_000
-    ? ok(`usnesení: ${items.length}`)
-    : chyba(`usnesení jen ${items.length}, čekáno >20 000`);
+  // Očekávaný objem závisí na tom, které zdroje jsou načtené: archiv z webu
+  // (2002–2022) nese ~23 000 usnesení, MARBES (2022+) řádově tisíce.
+  const zWebu = (await readDataset('usneseni-web'))?.items?.length ?? 0;
+  const zMarbesu = (await readDataset('usneseni-marbes'))?.items?.length ?? 0;
+  const ocekavano = (zWebu > 0 ? 20_000 : 0) + (zMarbesu > 0 ? 1_000 : 0);
+
+  if (ocekavano === 0) {
+    chyba('není načtený ani jeden zdroj usnesení');
+  } else if (items.length >= ocekavano) {
+    ok(`usnesení: ${items.length} (web ${zWebu}, MARBES ${zMarbesu})`);
+  } else {
+    chyba(`usnesení jen ${items.length}, čekáno >${ocekavano} (web ${zWebu}, MARBES ${zMarbesu})`);
+  }
 
   const bezData = items.filter((u) => !u.datum).length;
   bezData === 0 ? ok('všechna usnesení mají datum') : chyba(`${bezData} usnesení bez data`);
