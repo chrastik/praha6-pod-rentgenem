@@ -1,7 +1,7 @@
 {
-  "aktualizovano": "2026-09-04T18:39:06.913Z",
+  "aktualizovano": "2026-09-04T18:52:33.236Z",
   "usneseni": {
-    "pocet": 23155,
+    "pocet": 27984,
     "roky": [
       2026,
       2025,
@@ -30,18 +30,22 @@
       2002
     ],
     "organy": {
-      "RMC": 19674,
-      "ZMC": 3481
+      "RMC": 23833,
+      "ZMC": 4151
     },
     "rozsah": {
       "od": "2002-12-06",
-      "do": "2026-04-27"
+      "do": "2026-08-31"
     }
   },
   "datasety": {
     "zapisy": {
       "pocet": 4419,
       "aktualizovano": "2026-09-04T18:38:38.768Z"
+    },
+    "smlouvy": {
+      "pocet": 0,
+      "aktualizovano": "2026-09-04T18:52:30.547Z"
     },
     "faktury": {
       "pocet": 28156,
@@ -50,6 +54,10 @@
     "rozpocet": {
       "pocet": 6,
       "aktualizovano": "2026-09-04T18:39:06.248Z"
+    },
+    "deska": {
+      "pocet": 131,
+      "aktualizovano": "2026-09-04T18:52:28.267Z"
     }
   }
 }
