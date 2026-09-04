@@ -31,9 +31,6 @@ const czDate = (d) => {
 const stav = (await readDataset('smlouvy'))?.dumpStav ?? {};
 const znami = new Map((await readItems('smlouvy')).map((s) => [s.id, s]));
 
-if (process.env.BACKFILL === '1') await backfill();
-else await prirustek();
-
 // --------------------------------------------------------------- parsování ---
 const tag = (xml, name) =>
   new RegExp(`<(?:\\w+:)?${name}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'i').exec(xml)?.[1]?.trim();
@@ -189,3 +186,9 @@ async function uloz() {
     },
   });
 }
+
+// ------------------------------------------------------------------ spuštění ---
+// Až na konci: `const tag`, `cislo` a spol. jsou v dočasné mrtvé zóně, dokud se
+// modul nedovyhodnotí. Volání nahoře by spadlo na "Cannot access before initialization".
+if (process.env.BACKFILL === '1') await backfill();
+else await prirustek();
