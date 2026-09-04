@@ -7,14 +7,28 @@ const app = document.getElementById('app');
 const stavDat = document.getElementById('stavDat');
 
 const cache = new Map();
+let verze = '';   // časové razítko dat; přidává se k URL, aby prohlížeč nedržel starý JSON
+
 async function nacti(cesta) {
   if (cache.has(cesta)) return cache.get(cesta);
-  const p = fetch(`${DATA}/${cesta}`).then((r) => {
+  const url = `${DATA}/${cesta}${verze ? `?v=${encodeURIComponent(verze)}` : ''}`;
+  const p = fetch(url).then((r) => {
     if (!r.ok) throw new Error(`${cesta}: HTTP ${r.status}`);
     return r.json();
   });
   cache.set(cesta, p);
   return p;
+}
+
+/**
+ * Manifest se načítá mimo cache a bez ukládání do prohlížeče. Bez toho se
+ * návštěvníkovi po aktualizaci dat ještě dlouho zobrazují stará čísla —
+ * statické JSONy se cachují agresivně a manifest je na začátku řetězu.
+ */
+async function nactiManifest() {
+  const r = await fetch(`${DATA}/web/manifest.json?t=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`manifest.json: HTTP ${r.status}`);
+  return r.json();
 }
 
 const fmtDatum = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ') : '—');
@@ -300,7 +314,8 @@ document.getElementById('formHledat').addEventListener('submit', (e) => {
 window.addEventListener('hashchange', route);
 
 try {
-  manifest = await nacti('web/manifest.json');
+  manifest = await nactiManifest();
+  verze = manifest.aktualizovano ?? '';
   stavDat.textContent = `Data aktualizována ${new Date(manifest.aktualizovano).toLocaleString('cs-CZ')}.`;
   await route();
 } catch (err) {
