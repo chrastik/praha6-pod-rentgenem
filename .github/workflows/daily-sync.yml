@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: sync
@@ -73,3 +75,10 @@ jobs:
           git add data/
           git diff --staged --quiet || git commit -m "Denní aktualizace dat ($(TZ=Europe/Prague date +%F))"
           git push
+
+  # Data se commitla — teď z nich publikovat web. Musí to být takhle explicitně,
+  # spoléhat na push událost nejde (viz komentář v pages.yml).
+  publikovat:
+    needs: sync
+    if: always()
+    uses: ./.github/workflows/pages.yml

@@ -1,24 +1,68 @@
 name: Backfill registru smluv
-# Ruční, pouštět zřídka: projde všechny měsíční dumpy registru smluv.
+# Ruční, pouštět zřídka: projde měsíční open-data dumpy registru smluv.
+# Celá historie je ~19 GB ke stažení, proto jde rozdělit po letech — každá dávka
+# se commitne zvlášť, takže přerušení nezahodí hotovou práci.
 on:
   workflow_dispatch:
+    inputs:
+      rok_od:
+        description: 'Od roku (prázdné = od začátku)'
+        required: false
+        default: ''
+      rok_do:
+        description: 'Do roku včetně (prázdné = do konce)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: BACKFILL=1 node scripts/sync-smlouvy.mjs
-      - run: node scripts/validate.mjs
-      - run: |
+
+      - name: Projít dumpy
+        continue-on-error: true
+        env:
+          ROK_OD: ${{ inputs.rok_od }}
+          ROK_DO: ${{ inputs.rok_do }}
+        run: BACKFILL=1 node scripts/sync-smlouvy.mjs
+
+      - name: Build indexu
+        if: always()
+        continue-on-error: true
+        run: node scripts/merge-usneseni.mjs && node scripts/build-index.mjs
+
+      - name: Validace
+        if: always()
+        continue-on-error: true
+        run: node scripts/validate.mjs
+
+      # always(): commitovat i při vypršení limitu nebo zrušení běhu — jinak by
+      # několikahodinové stahování skončilo bez jediného uloženého záznamu.
+      - name: Commit dat
+        if: always()
+        run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/
           git diff --staged --quiet || git commit -m "Backfill registru smluv"
+          git pull --rebase --autostash || true
           git push
+
+  # Data se commitla — teď z nich publikovat web. Musí to být takhle explicitně,
+  # spoléhat na push událost nejde (viz komentář v pages.yml).
+  publikovat:
+    needs: backfill
+    if: always()
+    uses: ./.github/workflows/pages.yml

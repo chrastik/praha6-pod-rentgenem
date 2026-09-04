@@ -3,9 +3,10 @@ name: Publikovat web
 # Spouští se po každé aktualizaci dat i po změně frontendu.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['web/**', 'data/**', '.github/workflows/pages.yml']
+  # Volá se z workflow, které aktualizují data. Přes push to nejde: commity
+  # vytvořené GITHUB_TOKENem záměrně nespouštějí další workflow, takže by se
+  # web po každé aktualizaci dat nikdy sám nepřekreslil.
+  workflow_call:
 
 permissions:
   contents: read
