@@ -1,5 +1,5 @@
 {
-  "aktualizovano": "2026-09-04T18:52:33.236Z",
+  "aktualizovano": "2026-09-04T19:37:24.590Z",
   "usneseni": {
     "pocet": 27984,
     "roky": [
@@ -44,8 +44,8 @@
       "aktualizovano": "2026-09-04T18:38:38.768Z"
     },
     "smlouvy": {
-      "pocet": 0,
-      "aktualizovano": "2026-09-04T18:52:30.547Z"
+      "pocet": 12,
+      "aktualizovano": "2026-09-04T19:37:21.745Z"
     },
     "faktury": {
       "pocet": 28156,
@@ -57,7 +57,7 @@
     },
     "deska": {
       "pocet": 131,
-      "aktualizovano": "2026-09-04T18:52:28.267Z"
+      "aktualizovano": "2026-09-04T19:36:59.544Z"
     }
   }
 }
