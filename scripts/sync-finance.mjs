@@ -54,8 +54,38 @@ for (const o of obdobi) {
 }
 console.log(`  faktury: ${faktury.length}`);
 
+// CityVizor vrací platby v pořadí období, ne chronologicky, a částku dělí na
+// příjem/výdaj. Normalizujeme to tady, ať s tím frontend nemusí zápasit.
+const fakturyNormalizovane = faktury
+  .map((f) => ({
+    datum: (f.date ?? '').slice(0, 10) || null,
+    rok: f.year ?? null,
+    dodavatel: f.counterpartyName ?? null,
+    ico: f.counterpartyId ?? null,
+    popis: f.description ?? null,
+    vydaj: Number(f.expenditureAmount ?? 0) || 0,
+    prijem: Number(f.incomeAmount ?? 0) || 0,
+    paragraf: f.paragraph ?? null,
+    polozka: f.item ?? null,
+    akce: f.event ?? null,
+  }))
+  .sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? ''));
+
+const celkemVydaje = fakturyNormalizovane.reduce((a, f) => a + f.vydaj, 0);
+console.log(`  výdaje celkem: ${Math.round(celkemVydaje).toLocaleString('cs-CZ')} Kč`);
+
 await writeDataset('rozpocet', Object.entries(rozpocet).map(([rok, polozky]) => ({
   rok: Number(rok), polozky,
 })), { profil: { id, ico: profil.ico ?? null, slug: SLUG }, roky: dostupneRoky });
 
-await writeDataset('faktury', faktury, { profil: { id, slug: SLUG }, obdobi: obdobi.length });
+await writeDataset('faktury', fakturyNormalizovane, {
+  profil: { id, slug: SLUG },
+  obdobi: obdobi.length,
+  souhrn: {
+    celkemVydaje,
+    rozsah: {
+      od: fakturyNormalizovane.at(-1)?.datum ?? null,
+      do: fakturyNormalizovane[0]?.datum ?? null,
+    },
+  },
+});
