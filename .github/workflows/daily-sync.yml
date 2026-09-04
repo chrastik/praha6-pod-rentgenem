@@ -1,6 +1,10 @@
 name: Denní aktualizace dat
 on:
   workflow_dispatch:
+  # Ruční spuštění změnou souboru .resync-daily (viz komentář ve weekly-sync.yml).
+  push:
+    branches: [main]
+    paths: ['.resync-daily']
   schedule:
     # 4:17 a 5:17 UTC — druhý běh pokrývá posun letního/zimního času,
     # samotný job běží jen tehdy, je-li v Praze 6:xx.
@@ -30,7 +34,7 @@ jobs:
         run: |
           H=$(TZ=Europe/Prague date +%H)
           echo "hodina=$H" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$H" = "06" ]; then
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$H" = "06" ]; then
             echo "bezet=ano" >> "$GITHUB_OUTPUT"
           else
             echo "bezet=ne" >> "$GITHUB_OUTPUT"

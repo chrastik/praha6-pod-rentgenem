@@ -1,6 +1,11 @@
 name: Týdenní aktualizace
 on:
   workflow_dispatch:
+  # Ruční spuštění: stačí změnit obsah souboru .resync. Tlačítko "Run workflow"
+  # je na tomhle repozitáři nespolehlivé, commit funguje vždycky.
+  push:
+    branches: [main]
+    paths: ['.resync']
   schedule:
     - cron: '40 4 * * 1'   # pondělí
 
