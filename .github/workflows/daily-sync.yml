@@ -1,0 +1,73 @@
+name: Denní aktualizace dat
+on:
+  workflow_dispatch:
+  schedule:
+    # 4:17 a 5:17 UTC — druhý běh pokrývá posun letního/zimního času,
+    # samotný job běží jen tehdy, je-li v Praze 6:xx.
+    - cron: '17 4 * * *'
+    - cron: '17 5 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Je v Praze 6 hodin?
+        id: cas
+        run: |
+          H=$(TZ=Europe/Prague date +%H)
+          echo "hodina=$H" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$H" = "06" ]; then
+            echo "bezet=ano" >> "$GITHUB_OUTPUT"
+          else
+            echo "bezet=ne" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Každý zdroj zvlášť a s continue-on-error: výpadek jednoho nesmí
+      # shodit celý běh ani přepsat funkční dataset prázdným souborem.
+      - name: Usnesení — MARBES (2022+)
+        if: steps.cas.outputs.bezet == 'ano'
+        continue-on-error: true
+        run: node scripts/sync-usneseni-marbes.mjs
+
+      - name: Úřední deska
+        if: steps.cas.outputs.bezet == 'ano'
+        continue-on-error: true
+        run: node scripts/sync-deska.mjs
+
+      - name: Registr smluv — přírůstek
+        if: steps.cas.outputs.bezet == 'ano'
+        continue-on-error: true
+        run: node scripts/sync-smlouvy.mjs
+
+      - name: Sloučení usnesení
+        if: steps.cas.outputs.bezet == 'ano'
+        run: node scripts/merge-usneseni.mjs
+
+      - name: Build indexu
+        if: steps.cas.outputs.bezet == 'ano'
+        run: node scripts/build-index.mjs
+
+      - name: Validace
+        if: steps.cas.outputs.bezet == 'ano'
+        run: node scripts/validate.mjs
+
+      - name: Commit dat
+        if: steps.cas.outputs.bezet == 'ano'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Denní aktualizace dat ($(TZ=Europe/Prague date +%F))"
+          git push

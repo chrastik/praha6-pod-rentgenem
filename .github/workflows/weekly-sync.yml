@@ -1,0 +1,44 @@
+name: Týdenní aktualizace
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '40 4 * * 1'   # pondělí
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Archiv usnesení z webu (2002–2022)
+        continue-on-error: true
+        run: node scripts/sync-usneseni-web.mjs
+
+      - name: Programy a zápisy
+        continue-on-error: true
+        run: node scripts/sync-zapisy.mjs
+
+      - name: Rozpočet a faktury (CityVizor)
+        continue-on-error: true
+        run: node scripts/sync-finance.mjs
+
+      - run: node scripts/merge-usneseni.mjs
+      - run: node scripts/build-index.mjs
+      - run: node scripts/validate.mjs
+
+      - name: Commit dat
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Týdenní aktualizace dat ($(TZ=Europe/Prague date +%F))"
+          git push

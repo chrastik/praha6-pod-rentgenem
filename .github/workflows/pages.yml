@@ -1,0 +1,47 @@
+name: Publikovat web
+# Poskládá web/ + data/ do jedné složky a nasadí na GitHub Pages.
+# Spouští se po každé aktualizaci dat i po změně frontendu.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['web/**', 'data/**', '.github/workflows/pages.yml']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Poskládat web
+        run: |
+          mkdir -p _site
+          cp -r web/. _site/
+          # data jsou sourozenec web/, frontend je čeká na ./data
+          if [ -d data ]; then mkdir -p _site/data && cp -r data/. _site/data/; fi
+          # ať GitHub Pages neprohání soubory přes Jekyll
+          touch _site/.nojekyll
+          echo "Publikuji $(du -sh _site | cut -f1):"
+          find _site -maxdepth 2 -type d | sort
+
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

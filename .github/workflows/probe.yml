@@ -1,0 +1,14 @@
+name: Test zdrojů
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * 1'   # pondělí 5:17 UTC
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: node scripts/probe-sources.mjs
