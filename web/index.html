@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Praha 6 pod rentgenem</title>
+<meta name="description" content="Usnesení, rozpočet, faktury a smlouvy městské části Praha 6 na jednom místě, s dohledatelným zdrojem.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#obsah">Přeskočit na obsah</a>
+
+<header class="hlavicka">
+  <div class="wrap">
+    <a class="znacka" href="#/">Praha 6 <span>pod rentgenem</span></a>
+    <nav aria-label="Hlavní navigace">
+      <a href="#/usneseni">Usnesení</a>
+      <a href="#/finance">Peníze</a>
+      <a href="#/smlouvy">Smlouvy</a>
+      <a href="#/deska">Úřední deska</a>
+      <a href="#/zdroje">Zdroje</a>
+    </nav>
+    <form class="hledat" role="search" id="formHledat">
+      <input type="search" id="q" placeholder="Hledat v usneseních…" aria-label="Hledat v usneseních"
+             autocomplete="off" spellcheck="false">
+    </form>
+  </div>
+</header>
+
+<main id="obsah" class="wrap">
+  <div id="app" aria-live="polite">
+    <p class="nacitani">Načítám data…</p>
+  </div>
+</main>
+
+<footer class="paticka">
+  <div class="wrap">
+    <p>
+      Nezávislý projekt. <strong>Není to oficiální web městské části Praha 6.</strong>
+      Data pocházejí z veřejných zdrojů a u každého záznamu je odkaz na originál.
+      Oficiální web: <a href="https://www.praha6.cz">praha6.cz</a>.
+    </p>
+    <!-- DOPLŇ: kdo web provozuje. U projektu neseoucího volební heslo je uvedení
+         provozovatele a jeho politické příslušnosti zásadní pro důvěryhodnost. -->
+    <p>Provozuje <strong>[jméno]</strong>, <span>[funkce / politická příslušnost]</span>.
+      Kód projektu je otevřený.</p>
+    <p id="stavDat" class="drobne"></p>
+  </div>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

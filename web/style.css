@@ -1,0 +1,88 @@
+:root{
+  --ground:#f2f3f4; --surface:#fff; --surface-2:#e9ecee;
+  --ink:#15191c; --muted:#5a656c; --faint:#88929a;
+  --rule:#d5dade; --accent:#1f4b8f; --accent-soft:#e4eaf4;
+  --zmc:#8a3d12; --rmc:#1f4b8f;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ground:#101418; --surface:#191f25; --surface-2:#232a31;
+    --ink:#e4e9ec; --muted:#98a3ab; --faint:#6b767e;
+    --rule:#2b333a; --accent:#7fa7e0; --accent-soft:#1b2a3d;
+    --zmc:#e0a07a; --rmc:#7fa7e0;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font:16px/1.6 "Source Serif 4",Georgia,"Times New Roman",serif;
+}
+h1,h2,h3,nav,.znacka,button,input,th,.stitek,.badge{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+a{color:var(--accent)}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:8px;top:8px;background:var(--surface);padding:8px;z-index:9}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.hlavicka{background:var(--surface);border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:5}
+.hlavicka .wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-block:12px}
+.znacka{font-weight:700;font-size:1.05rem;text-decoration:none;color:var(--ink);letter-spacing:-.01em}
+.znacka span{color:var(--muted);font-weight:500}
+.hlavicka nav{display:flex;gap:16px;flex-wrap:wrap}
+.hlavicka nav a{font-size:.9rem;text-decoration:none;color:var(--muted)}
+.hlavicka nav a:hover,.hlavicka nav a[aria-current]{color:var(--ink);text-decoration:underline}
+.hledat{margin-left:auto}
+.hledat input{
+  font-size:.9rem;padding:7px 11px;min-width:220px;
+  border:1px solid var(--rule);border-radius:3px;background:var(--ground);color:var(--ink);
+}
+
+main{padding-block:32px 64px}
+h1{font-size:1.9rem;letter-spacing:-.02em;margin:0 0 .3em;text-wrap:balance}
+h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
+.podnadpis{color:var(--muted);margin:0 0 1.6em;max-width:62ch}
+
+.filtry{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+.filtry select,.filtry button{
+  font-size:.87rem;padding:6px 10px;border:1px solid var(--rule);border-radius:3px;
+  background:var(--surface);color:var(--ink);
+}
+.filtry .pocet{margin-left:auto;color:var(--muted);font-size:.87rem;font-variant-numeric:tabular-nums}
+
+.seznam{border-top:1px solid var(--rule)}
+.polozka{border-bottom:1px solid var(--rule);padding:14px 0;display:grid;grid-template-columns:auto 1fr;gap:0 16px}
+.polozka .meta{font-size:.8rem;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:.2em}
+.polozka h3{font-size:1rem;font-weight:600;margin:0 0 .3em;line-height:1.4}
+.polozka h3 a{color:var(--ink);text-decoration:none}
+.polozka h3 a:hover{text-decoration:underline}
+.polozka .radek{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:.82rem;color:var(--muted)}
+.badge{font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:.2em .5em;border-radius:2px}
+.badge.ZMC{background:var(--accent-soft);color:var(--zmc)}
+.badge.RMC{background:var(--accent-soft);color:var(--rmc)}
+.stitek{font-size:.75rem;color:var(--muted);background:var(--surface-2);padding:.15em .5em;border-radius:2px}
+
+.strankovani{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:24px;font-size:.87rem}
+.strankovani button{padding:6px 12px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:3px}
+.strankovani button[disabled]{opacity:.4}
+
+.karty{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin:20px 0}
+.karty>div{background:var(--surface);padding:14px 16px}
+.karty .v{font-family:system-ui,sans-serif;font-weight:700;font-size:1.4rem;font-variant-numeric:tabular-nums}
+.karty .k{font-size:.8rem;color:var(--muted)}
+
+.nacitani,.prazdno{color:var(--muted);padding:40px 0;text-align:center}
+.chyba{border-left:3px solid #a02b26;background:var(--surface);padding:14px 16px;margin:16px 0}
+
+.paticka{border-top:1px solid var(--rule);background:var(--surface);padding-block:22px;font-size:.85rem;color:var(--muted)}
+.paticka p{margin:0 0 .5em;max-width:70ch}
+.drobne{font-size:.78rem;color:var(--faint)}
+
+@media (max-width:640px){
+  .hledat{margin-left:0;width:100%}
+  .hledat input{width:100%}
+  .polozka{grid-template-columns:1fr;gap:4px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
