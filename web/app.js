@@ -230,16 +230,20 @@ async function smlouvy() {
   app.innerHTML = `
     <h1>Registr smluv</h1>
     <p class="podnadpis">Smlouvy městské části Praha 6, IČO ${esc(ds.ico ?? '00063703')}.
-    Hodnota smlouvy neurčuje směr platby.</p>
+    Uvedená hodnota je cena bez DPH tak, jak ji strany do registru zapsaly — neříká,
+    kterým směrem peníze tečou, a u části smluv chybí.</p>
     <div class="karty">
       <div><div class="v">${fmtCislo(ds.pocet)}</div><div class="k">smluv</div></div>
       <div><div class="v">${fmtKc(ds.souhrn?.celkovaHodnota)}</div><div class="k">známá hodnota</div></div>
     </div>
     <div class="seznam">${ds.items.slice(0, 100).map((s) => `
-      <div class="polozka"><div class="meta">${fmtDatum(s.datum)}</div>
-      <div><h3><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.predmet ?? 'Bez předmětu')}</a></h3>
-      <div class="radek"><span>${fmtKc(s.castka)}</span>${s.protistrana ? `<span>${esc(s.protistrana)}</span>` : ''}</div>
-      </div></div>`).join('')}</div>`;
+      <div class="polozka"><div class="meta">${fmtDatum(s.zverejneno ?? s.datum)}</div>
+      <div><h3><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.predmet ?? 'Bez uvedeného předmětu')}</a></h3>
+      <div class="radek">
+        <span>${fmtKc(s.castkaBezDph)}${s.castkaBezDph != null ? ' bez DPH' : ''}</span>
+        ${s.protistrana ? `<span>${esc(s.protistrana)}</span>` : ''}
+        ${s.datum ? `<span>uzavřeno ${fmtDatum(s.datum)}</span>` : ''}
+      </div></div></div>`).join('')}</div>`;
 }
 
 async function deska() {
