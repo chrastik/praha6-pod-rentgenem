@@ -21,7 +21,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # ref: main — když se pages.yml volá z workflow, které si právě commitlo
+      # čerstvá data, výchozí checkout by vzal commit, který běh spustil, tedy
+      # stav PŘED tím commitem. Web by se pak publikoval vždy o krok pozadu.
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Poskládat web
         run: |
