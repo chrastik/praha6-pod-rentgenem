@@ -8,7 +8,8 @@
  */
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { readItems, readDataset, norm, DATA_DIR } from './lib/util.mjs';
+import { readItems, readDataset, writeDataset, norm, DATA_DIR } from './lib/util.mjs';
+import { sestav as sestavDotace, zkontroluj as zkontrolujDotace } from './lib/dotace.mjs';
 
 const OUT = path.join(DATA_DIR, 'web');
 await rm(OUT, { recursive: true, force: true });
@@ -70,7 +71,36 @@ await writeFile(path.join(OUT, 'index', 'docs.json'), JSON.stringify(docs), 'utf
 await writeFile(path.join(OUT, 'index', 'tokens.json'), JSON.stringify(orezany), 'utf8');
 console.log(`  index: ${docs.length} dokumentů, ${Object.keys(orezany).length} tokenů (${vyhozeno} příliš častých vyhozeno)`);
 
-// ---- 3) manifest pro frontend ----------------------------------------------
+// ---- 3) dotace odvozené z registru smluv -----------------------------------
+// Není to samostatný zdroj — dotační smlouvy se vytáhnou z už staženého
+// registru. Proto se to přepočítá při každém buildu a nepotřebuje to vlastní
+// synchronizaci ani workflow.
+const smlouvyProDotace = await readItems('smlouvy');
+if (smlouvyProDotace.length) {
+  const dotace = sestavDotace(smlouvyProDotace);
+  const potize = zkontrolujDotace(dotace);
+  if (potize.length) {
+    console.warn('  ! dotace neprošly kontrolou, dataset nepřepisuji:');
+    for (const x of potize) console.warn(`     ✗ ${x}`);
+  } else {
+    await writeDataset('dotace', dotace.items, {
+      prijemci: dotace.prijemci,
+      oblasti: dotace.oblasti,
+      souhrn: dotace.souhrn,
+      poznamka: 'Odvozeno z registru smluv MČ Praha 6. Oblast je odhad z předmětu '
+        + 'smlouvy a názvu příjemce, ne údaj z registru. Dotace pod 50 000 Kč se '
+        + 'nemusí do registru zveřejňovat, takže seznam nemusí být úplný.',
+    });
+    const s = dotace.souhrn;
+    console.log(`  dotace: ${s.rozdano.pocet} rozdaných za `
+      + `${Math.round(s.rozdano.castka).toLocaleString('cs-CZ')} Kč, ${s.prijemcu} příjemců`
+      + ` (přijatých ${s.prijato.pocet})`);
+  }
+} else {
+  console.warn('  ! chybí data/smlouvy.json, dotace se nepřepočítaly');
+}
+
+// ---- 4) manifest pro frontend ----------------------------------------------
 const manifest = {
   aktualizovano: new Date().toISOString(),
   usneseni: {
@@ -81,7 +111,7 @@ const manifest = {
   },
   datasety: {},
 };
-for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska', 'scitani', 'smlouvy-organizace']) {
+for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska', 'scitani', 'smlouvy-organizace', 'dotace']) {
   const ds = await readDataset(name);
   if (ds) manifest.datasety[name] = { pocet: ds.pocet, aktualizovano: ds.aktualizovano };
 }
