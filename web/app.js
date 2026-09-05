@@ -131,6 +131,8 @@ const routes = {
   '/usneseni': usneseni,
   '/finance': finance,
   '/smlouvy': smlouvy,
+  '/organizace': organizace,
+  '/firmy': organizace,
   '/deska': deska,
   '/scitani': scitani,
   '/zdroje': zdroje,
@@ -140,8 +142,11 @@ async function route() {
   const [cesta, dotaz] = location.hash.replace(/^#/, '').split('?');
   const view = routes[cesta || '/'] ?? domu;
   const params = new URLSearchParams(dotaz ?? '');
+  // Zřizované organizace mají v liště jednu položku, ale dvě stránky
+  // (+ profily subjektů) — ať zůstane zvýrazněná na všech.
+  const proListu = (cesta === '/firmy') ? '/organizace' : (cesta || '/');
   document.querySelectorAll('.hlavicka nav a').forEach((a) => {
-    a.toggleAttribute('aria-current', a.getAttribute('href') === `#${cesta || '/'}`);
+    a.toggleAttribute('aria-current', a.getAttribute('href') === `#${proListu}`);
   });
   app.innerHTML = '<p class="nacitani">Načítám…</p>';
   try {
@@ -167,6 +172,7 @@ async function domu() {
       <div><div class="v">${fmtCislo(d.smlouvy?.pocet)}</div><div class="k">smluv v registru</div></div>
       <div><div class="v">${fmtCislo(d.faktury?.pocet)}</div><div class="k">jednotlivých faktur</div></div>
       <div><div class="v">${fmtCislo(d.zapisy?.pocet)}</div><div class="k">zápisů a programů</div></div>
+      <div><div class="v">${fmtCislo(d['smlouvy-organizace']?.pocet)}</div><div class="k">smluv zřizovaných organizací</div></div>
       <div><div class="v">${fmtCislo(d.deska?.pocet)}</div><div class="k">položek úřední desky</div></div>
     </div>
     <h2>Kde začít</h2>
@@ -175,6 +181,7 @@ async function domu() {
       ${odkaz('#/finance', 'Peníze', 'Položkový rozpočet a jednotlivé faktury z CityVizoru.')}
       ${odkaz('#/smlouvy', 'Registr smluv', 'Smlouvy městské části podle IČO 00063703.')}
       ${odkaz('#/deska', 'Úřední deska', 'Aktuálně vyvěšené dokumenty a průběžně budovaný archiv.')}
+      ${odkaz('#/organizace', 'Zřizované organizace', 'Smlouvy škol, školek, Léčebny, Pečovatelské služby, KITT6 a SNEO — každý subjekt zvlášť.')}
       ${odkaz('#/scitani', 'Sčítání 2021', 'Kolik nás je, jak bydlíme, co jsme vystudovali a čím jezdíme do práce.')}
     </div>`;
 }
@@ -412,6 +419,199 @@ const radekSmlouva = (s) => `
         <span>${fmtKc(s.castkaBezDph)}${s.castkaBezDph != null ? ' bez DPH' : ''}</span>
         ${s.protistrana ? `<span>${esc(s.protistrana)}</span>` : ''}
         ${s.datum ? `<span>uzavřeno ${fmtDatum(s.datum)}</span>` : ''}
+      </div>
+    </div>
+  </div>`;
+
+// ------------------------------------------- zřizované organizace a firmy ---
+/**
+ * Každý subjekt je samostatný publikující subjekt registru smluv. Jeho čísla
+ * se schválně nikde nesčítají s čísly městské části — smlouva mezi radnicí
+ * a její školou by se počítala dvakrát.
+ */
+const ORG_STRANKY = {
+  '/organizace': {
+    skupina: 'prispevkove',
+    nadpis: 'Zřizované organizace',
+    popis: 'Příspěvkové organizace městské části Praha 6 — školy, školky, '
+      + 'Léčebna dlouhodobě nemocných, Pečovatelská služba a KITT6. '
+      + 'Každá z nich je samostatný publikující subjekt registru smluv.',
+  },
+  '/firmy': {
+    skupina: 'firmy',
+    nadpis: 'Městské firmy',
+    popis: 'Obchodní společnosti, ve kterých má městská část Praha 6 podíl. '
+      + 'Publikují do registru smluv samy za sebe.',
+  },
+};
+
+const orgPrepinac = (aktivni, poctu) => `
+  <div class="prepinac" role="tablist">
+    <a href="#/organizace" role="tab"${aktivni === '/organizace' ? ' aria-selected="true"' : ''}>
+      Příspěvkové organizace <span class="cislo">${fmtCislo(poctu.prispevkove)}</span></a>
+    <a href="#/firmy" role="tab"${aktivni === '/firmy' ? ' aria-selected="true"' : ''}>
+      Městské firmy <span class="cislo">${fmtCislo(poctu.firmy)}</span></a>
+  </div>`;
+
+const RADIT = {
+  smluv: { popis: 'Nejvíc smluv', fn: (a, b) => b.pocet - a.pocet },
+  hodnota: { popis: 'Nejvyšší známá hodnota', fn: (a, b) => b.hodnota - a.hodnota },
+  abecedne: { popis: 'Abecedně', fn: (a, b) => a.nazev.localeCompare(b.nazev, 'cs') },
+};
+
+async function nactiOrganizace() {
+  const ds = await nacti('smlouvy-organizace.json').catch(() => null);
+  if (!ds) return null;
+  const souhrny = ds.souhrny ?? [];
+  return {
+    ds,
+    souhrny,
+    poctu: {
+      prispevkove: souhrny.filter((s) => s.typ !== 'firma').length,
+      firmy: souhrny.filter((s) => s.typ === 'firma').length,
+    },
+  };
+}
+
+async function organizace(params) {
+  const cesta = location.hash.replace(/^#/, '').split('?')[0] || '/organizace';
+  const nacteno = await nactiOrganizace();
+  if (!nacteno) {
+    app.innerHTML = `<h1>${esc(ORG_STRANKY[cesta].nadpis)}</h1>
+      <p class="prazdno">Smlouvy zřizovaných organizací ještě nebyly načteny.</p>`;
+    return;
+  }
+  const { ds, souhrny, poctu } = nacteno;
+
+  // Profil jednoho subjektu má vlastní pohled, ale sdílí URL — router je prostý.
+  if (params.get('ico')) return organizaceDetail(params, ds, cesta);
+
+  const strana = ORG_STRANKY[cesta];
+  const vFirmach = strana.skupina === 'firmy';
+  let vybrane = souhrny.filter((s) => (s.typ === 'firma') === vFirmach);
+
+  const typ = params.get('typ') ?? '';
+  if (typ) vybrane = vybrane.filter((s) => s.typ === typ);
+
+  const radit = RADIT[params.get('radit')] ? params.get('radit') : 'smluv';
+  vybrane = [...vybrane].sort(RADIT[radit].fn);
+
+  const smluv = vybrane.reduce((a, s) => a + s.pocet, 0);
+  const hodnota = vybrane.reduce((a, s) => a + s.hodnota, 0);
+  const typyKFiltru = [...new Set(souhrny.filter((s) => (s.typ === 'firma') === vFirmach).map((s) => s.typ))];
+
+  app.innerHTML = `
+    <p class="nadsekce">Registr smluv</p>
+    <h1>${esc(strana.nadpis)}</h1>
+    <p class="podnadsekce">${esc(strana.popis)}</p>
+
+    ${orgPrepinac(cesta, poctu)}
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(vybrane.length)}</div><div class="k">subjektů s ověřeným IČO</div></div>
+      <div><div class="v">${fmtCislo(smluv)}</div><div class="k">smluv v databázi</div></div>
+      <div><div class="v">${fmtKc(hodnota)}</div><div class="k">známá hodnota</div></div>
+    </div>
+
+    <p class="poznamka"><strong>Samostatné datasety.</strong> Čísla výše nepřičítáme
+    k městské části do jednoho „celkového“ čísla — smlouva mezi radnicí a její
+    organizací by se počítala dvakrát. Hodnota neříká, kterým směrem peníze tečou,
+    a u části smluv chybí úplně.</p>
+
+    <form class="filtry" id="filtry">
+      ${typyKFiltru.length > 1 ? `
+      <select name="typ" aria-label="Typ organizace">
+        <option value="">Všechny typy</option>
+        ${typyKFiltru.map((t) => `<option value="${esc(t)}"${t === typ ? ' selected' : ''}>${esc(ds.typy?.[t]?.nazev ?? t)}</option>`).join('')}
+      </select>` : ''}
+      <select name="radit" aria-label="Řazení">
+        ${Object.entries(RADIT).map(([k, v]) => `<option value="${k}"${k === radit ? ' selected' : ''}>${esc(v.popis)}</option>`).join('')}
+      </select>
+      <span class="pocet">${fmtCislo(vybrane.length)} subjektů</span>
+    </form>
+
+    ${vybrane.length === 0 ? '<p class="prazdno">Žádný subjekt neodpovídá zadání.</p>'
+      : `<div class="subjekty">${vybrane.map(kartaSubjektu).join('')}</div>`}`;
+
+  zapoj(cesta, params);
+}
+
+const kartaSubjektu = (s) => `
+  <a class="subjekt" href="#/organizace?ico=${esc(s.ico)}">
+    <div class="subjekt-hlava">
+      <h3>${esc(s.nazev)}</h3>
+      <span class="sipka" aria-hidden="true">→</span>
+    </div>
+    <div class="subjekt-ico">IČO ${esc(s.ico)}</div>
+    <div class="subjekt-cisla">
+      <span><strong>${fmtCislo(s.pocet)}</strong> smluv</span>
+      <span><strong>${fmtCislo(s.protistran)}</strong> protistran</span>
+      <span><strong>${fmtKc(s.hodnota)}</strong> známá hodnota</span>
+    </div>
+    ${s.posledni ? `<div class="subjekt-posledni">Poslední smlouva ${fmtDatum(s.posledni)}</div>` : ''}
+  </a>`;
+
+async function organizaceDetail(params, ds, cesta) {
+  const ico = params.get('ico');
+  const souhrn = (ds.souhrny ?? []).find((s) => s.ico === ico);
+  if (!souhrn) {
+    app.innerHTML = `<h1>Neznámý subjekt</h1>
+      <p class="prazdno">IČO ${esc(ico)} mezi zřizovanými organizacemi není.
+      <a href="#/organizace">Zpět na přehled</a>.</p>`;
+    return;
+  }
+
+  const zpet = souhrn.typ === 'firma' ? '#/firmy' : '#/organizace';
+  const rok = params.get('rok') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = ds.items.filter((x) => x.subjektIco === ico);
+  if (rok) vybrane = vybrane.filter((x) => (x.publikovano ?? '').startsWith(rok));
+  if (nq) vybrane = vybrane.filter((x) => norm(`${x.predmet ?? ''} ${x.protistrana ?? ''}`).includes(nq));
+
+  const soucet = vybrane.reduce((a, x) => a + (x.mena === 'CZK' ? (x.castka ?? 0) : 0), 0);
+  const { s, stran, kus } = vyrez(vybrane, params);
+  const vsechny = ds.items.filter((x) => x.subjektIco === ico);
+
+  app.innerHTML = `
+    <p class="nadsekce"><a href="${zpet}">← ${esc(ds.typy?.[souhrn.typ]?.nazev ?? 'Zřizované organizace')}</a></p>
+    <h1>${esc(souhrn.nazev)}</h1>
+    <p class="podnadsekce">IČO ${esc(ico)} · samostatný publikující subjekt registru smluv.
+    Údaje pocházejí ze seznamu registru, částky jsou zaokrouhlené na celé koruny.
+    <a href="https://smlouvy.gov.cz/vyhledavani?subject_idnum=${esc(ico)}" target="_blank" rel="noopener">Ověřit v registru →</a></p>
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(souhrn.pocet)}</div><div class="k">smluv celkem</div></div>
+      <div><div class="v">${fmtCislo(souhrn.protistran)}</div><div class="k">různých protistran</div></div>
+      <div><div class="v">${fmtKc(souhrn.hodnota)}</div><div class="k">známá hodnota</div></div>
+      <div><div class="v">${souhrn.posledni ? fmtDatum(souhrn.posledni) : '—'}</div><div class="k">poslední smlouva</div></div>
+    </div>
+
+    <form class="filtry" id="filtry">
+      <select name="rok" aria-label="Rok zveřejnění">
+        <option value="">Všechny roky</option>
+        ${volby(rokyZ(vsechny, 'publikovano'), rok)}
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Předmět nebo protistrana…"
+             aria-label="Hledat ve smlouvách této organizace">
+      <span class="pocet">${fmtCislo(vybrane.length)} smluv · ${fmtKc(soucet)}</span>
+    </form>
+
+    ${seznam(kus, radekSmlouvaOrg, 'Žádná smlouva neodpovídá zadání.')}
+    ${strankovani(s, stran, vybrane.length)}`;
+
+  zapoj(cesta, params, ['ico']);
+}
+
+const radekSmlouvaOrg = (x) => `
+  <div class="polozka">
+    <div class="meta">${fmtDatum(x.publikovano)}</div>
+    <div>
+      <h3><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.predmet ?? 'Bez uvedeného předmětu')}</a></h3>
+      <div class="radek">
+        <span>${x.castka != null ? `${fmtKc(x.castka)}${x.sDph === true ? ' vč. DPH' : x.sDph === false ? ' bez DPH' : ''}` : 'hodnota neuvedena'}</span>
+        ${x.protistrana ? `<span>${esc(x.protistrana)}</span>` : ''}
       </div>
     </div>
   </div>`;

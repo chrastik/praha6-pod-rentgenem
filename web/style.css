@@ -161,8 +161,11 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 }
 .strankovani .rozsah{flex-basis:100%;text-align:center;color:var(--faint);font-size:.8rem;font-variant-numeric:tabular-nums}
 
-.karty{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin:20px 0}
-.karty>div{background:var(--surface);padding:14px 16px}
+/* Linky mezi dlaždicemi kreslí každá dlaždice sama (box-shadow), ne pozadí
+   mřížky. Jinak se u počtu, který se nerozdělí beze zbytku, ukáže prázdné
+   šedé místo tam, kde dlaždice chybí. */
+.karty{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;margin:20px 0}
+.karty>div{background:var(--surface);padding:14px 16px;box-shadow:0 0 0 1px var(--rule)}
 .karty .v{font-family:system-ui,sans-serif;font-weight:700;font-size:1.4rem;font-variant-numeric:tabular-nums}
 .karty .k{font-size:.8rem;color:var(--muted)}
 
@@ -186,3 +189,39 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
   .polozka{grid-template-columns:1fr;gap:4px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* --------------------------------- zřizované organizace a městské firmy --- */
+.prepinac{display:flex;gap:1px;background:var(--rule);border:1px solid var(--rule);margin:0 0 4px;flex-wrap:wrap}
+.prepinac a{
+  flex:1 1 auto;background:var(--surface);padding:10px 14px;text-decoration:none;
+  color:var(--muted);font-size:.9rem;display:flex;align-items:center;gap:8px;justify-content:center;
+}
+.prepinac a:hover{color:var(--ink)}
+.prepinac a[aria-selected="true"]{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.prepinac .cislo{
+  font-size:.78rem;color:var(--muted);background:var(--surface-2);
+  border-radius:10px;padding:1px 7px;font-variant-numeric:tabular-nums;
+}
+.prepinac a[aria-selected="true"] .cislo{background:var(--surface)}
+
+.poznamka{
+  font-size:.84rem;color:var(--muted);background:var(--surface);
+  border:1px solid var(--rule);border-left:3px solid var(--znacka);
+  padding:10px 14px;margin:0 0 20px;max-width:80ch;line-height:1.55;
+}
+.poznamka strong{color:var(--ink)}
+
+.subjekty{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule)}
+.subjekt{
+  background:var(--surface);padding:14px 16px;text-decoration:none;color:var(--ink);
+  display:flex;flex-direction:column;gap:6px;
+}
+.subjekt:hover{background:var(--accent-soft)}
+.subjekt-hlava{display:flex;align-items:baseline;gap:10px;justify-content:space-between}
+.subjekt h3{font-size:.98rem;font-weight:600;margin:0;line-height:1.35}
+.subjekt .sipka{color:var(--faint);flex:none}
+.subjekt:hover .sipka{color:var(--accent)}
+.subjekt-ico{font-size:.76rem;color:var(--faint);font-variant-numeric:tabular-nums}
+.subjekt-cisla{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--muted);margin-top:2px}
+.subjekt-cisla strong{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.subjekt-posledni{font-size:.76rem;color:var(--faint);margin-top:auto;padding-top:4px}
