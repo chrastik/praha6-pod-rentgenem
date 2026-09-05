@@ -1,5 +1,5 @@
 {
-  "aktualizovano": "2026-09-05T14:02:20.457Z",
+  "aktualizovano": "2026-09-05T14:03:19.992Z",
   "usneseni": {
     "pocet": 27984,
     "roky": [
@@ -66,6 +66,10 @@
     "smlouvy-organizace": {
       "pocet": 7031,
       "aktualizovano": "2026-09-05T13:22:15.225Z"
+    },
+    "dotace": {
+      "pocet": 738,
+      "aktualizovano": "2026-09-05T14:03:19.740Z"
     }
   }
 }
