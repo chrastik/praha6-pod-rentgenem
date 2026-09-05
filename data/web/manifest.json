@@ -1,5 +1,5 @@
 {
-  "aktualizovano": "2026-09-05T08:29:14.366Z",
+  "aktualizovano": "2026-09-05T08:34:25.085Z",
   "usneseni": {
     "pocet": 27984,
     "roky": [
@@ -58,6 +58,10 @@
     "deska": {
       "pocet": 131,
       "aktualizovano": "2026-09-04T19:36:59.544Z"
+    },
+    "scitani": {
+      "pocet": 1,
+      "aktualizovano": "2026-09-05T08:34:23.217Z"
     }
   }
 }
