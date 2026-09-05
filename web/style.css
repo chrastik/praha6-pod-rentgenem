@@ -225,3 +225,17 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 .subjekt-cisla{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--muted);margin-top:2px}
 .subjekt-cisla strong{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .subjekt-posledni{font-size:.76rem;color:var(--faint);margin-top:auto;padding-top:4px}
+
+/* ------------------------------------------------------------------ dotace --- */
+.polozka .castka{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+.stitek{
+  font-size:.74rem;background:var(--surface-2);color:var(--muted);
+  border-radius:3px;padding:1px 7px;white-space:nowrap;
+}
+/* Oblast převzatá od jiných dotací téhož příjemce není údaj ze smlouvy —
+   tečkovaný rámeček to přizná i tomu, kdo nenajede myší na popisek. */
+.stitek.odhad{border:1px dotted var(--faint);padding:0 6px}
+.stitek.program{background:var(--accent-soft);color:var(--ink)}
+.stitek-odkaz{color:var(--accent);text-decoration:none}
+.stitek-odkaz:hover{text-decoration:underline}
+.polozka .radek.tlumene{color:var(--faint);font-size:.78rem;margin-top:.25em}

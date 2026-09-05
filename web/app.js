@@ -133,6 +133,9 @@ const routes = {
   '/smlouvy': smlouvy,
   '/organizace': organizace,
   '/firmy': organizace,
+  '/dotace': dotace,
+  '/dotace-prijemci': dotace,
+  '/dotace-prijate': dotace,
   '/deska': deska,
   '/scitani': scitani,
   '/zdroje': zdroje,
@@ -144,7 +147,9 @@ async function route() {
   const params = new URLSearchParams(dotaz ?? '');
   // Zřizované organizace mají v liště jednu položku, ale dvě stránky
   // (+ profily subjektů) — ať zůstane zvýrazněná na všech.
-  const proListu = (cesta === '/firmy') ? '/organizace' : (cesta || '/');
+  const proListu = (cesta === '/firmy') ? '/organizace'
+    : cesta.startsWith('/dotace') ? '/dotace'
+    : (cesta || '/');
   document.querySelectorAll('.hlavicka nav a').forEach((a) => {
     a.toggleAttribute('aria-current', a.getAttribute('href') === `#${proListu}`);
   });
@@ -173,6 +178,7 @@ async function domu() {
       <div><div class="v">${fmtCislo(d.faktury?.pocet)}</div><div class="k">jednotlivých faktur</div></div>
       <div><div class="v">${fmtCislo(d.zapisy?.pocet)}</div><div class="k">zápisů a programů</div></div>
       <div><div class="v">${fmtCislo(d['smlouvy-organizace']?.pocet)}</div><div class="k">smluv zřizovaných organizací</div></div>
+      <div><div class="v">${fmtCislo(d.dotace?.pocet)}</div><div class="k">dotačních smluv</div></div>
       <div><div class="v">${fmtCislo(d.deska?.pocet)}</div><div class="k">položek úřední desky</div></div>
     </div>
     <h2>Kde začít</h2>
@@ -181,6 +187,7 @@ async function domu() {
       ${odkaz('#/finance', 'Peníze', 'Položkový rozpočet a jednotlivé faktury z CityVizoru.')}
       ${odkaz('#/smlouvy', 'Registr smluv', 'Smlouvy městské části podle IČO 00063703.')}
       ${odkaz('#/deska', 'Úřední deska', 'Aktuálně vyvěšené dokumenty a průběžně budovaný archiv.')}
+      ${odkaz('#/dotace', 'Dotace', 'Kdo dostal od radnice dotaci, kdy, na co a kolik — i souhrn za jednotlivé příjemce.')}
       ${odkaz('#/organizace', 'Zřizované organizace', 'Smlouvy škol, školek, Léčebny, Pečovatelské služby, KITT6 a SNEO — každý subjekt zvlášť.')}
       ${odkaz('#/scitani', 'Sčítání 2021', 'Kolik nás je, jak bydlíme, co jsme vystudovali a čím jezdíme do práce.')}
     </div>`;
@@ -616,6 +623,248 @@ const radekSmlouvaOrg = (x) => `
     </div>
   </div>`;
 
+// ------------------------------------------------------------------ dotace ---
+/**
+ * Dotace se neberou z vlastního zdroje — odvozují se z registru smluv. Proto
+ * tu na dvou místech otevřeně říkáme, co je údaj z registru (příjemce, částka,
+ * datum) a co je náš odhad (oblast), a že seznam nemusí být úplný.
+ */
+const DOT_STRANKY = {
+  '/dotace': { pohled: 'dotace', nadpis: 'Dotace' },
+  '/dotace-prijemci': { pohled: 'prijemci', nadpis: 'Příjemci dotací' },
+  '/dotace-prijate': { pohled: 'prijate', nadpis: 'Co dostala Praha 6' },
+};
+
+const dotPrepinac = (aktivni, s) => `
+  <div class="prepinac" role="tablist">
+    <a href="#/dotace" role="tab"${aktivni === '/dotace' ? ' aria-selected="true"' : ''}>
+      Rozdané dotace <span class="cislo">${fmtCislo(s.rozdano.pocet)}</span></a>
+    <a href="#/dotace-prijemci" role="tab"${aktivni === '/dotace-prijemci' ? ' aria-selected="true"' : ''}>
+      Příjemci <span class="cislo">${fmtCislo(s.prijemcu)}</span></a>
+    <a href="#/dotace-prijate" role="tab"${aktivni === '/dotace-prijate' ? ' aria-selected="true"' : ''}>
+      Co Praha 6 dostala <span class="cislo">${fmtCislo(s.prijato.pocet)}</span></a>
+  </div>`;
+
+const POZNAMKA_DOTACE = `
+  <p class="poznamka"><strong>Odvozeno z registru smluv.</strong> Příjemce, částka
+  a datum jsou údaje z registru. <em>Oblast</em> je náš odhad podle předmětu smlouvy
+  a názvu příjemce — u části dotací ji nelze určit vůbec. Dotace pod 50 000 Kč se
+  do registru zveřejňovat nemusí, takže seznam nemusí být úplný, a registr sahá
+  jen do poloviny roku 2016.</p>`;
+
+async function nactiDotace() {
+  const ds = await nacti('dotace.json').catch(() => null);
+  return ds && ds.souhrn ? ds : null;
+}
+
+async function dotace(params) {
+  const cesta = location.hash.replace(/^#/, '').split('?')[0] || '/dotace';
+  const ds = await nactiDotace();
+  if (!ds) {
+    app.innerHTML = `<h1>${esc(DOT_STRANKY[cesta].nadpis)}</h1>
+      <p class="prazdno">Dotace ještě nebyly odvozeny z registru smluv.</p>`;
+    return;
+  }
+  if (params.get('prijemce')) return dotacePrijemce(params, ds, cesta);
+
+  const pohled = DOT_STRANKY[cesta].pohled;
+  if (pohled === 'prijemci') return dotacePrijemci(params, ds, cesta);
+  return dotaceSeznam(params, ds, cesta, pohled === 'prijate');
+}
+
+const oblastNazev = (ds, kod) => ds.oblasti?.[kod]?.nazev ?? 'Nezařazeno';
+
+function dotaceSeznam(params, ds, cesta, prijate) {
+  const s = ds.souhrn;
+  const rok = params.get('rok') ?? '';
+  const oblast = params.get('oblast') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = ds.items.filter((d) => (d.smer === 'prijata') === prijate);
+  if (rok) vybrane = vybrane.filter((d) => String(d.rok) === rok);
+  if (oblast) vybrane = vybrane.filter((d) => d.oblast === oblast);
+  if (nq) {
+    vybrane = vybrane.filter((d) =>
+      norm(`${d.prijemce ?? ''} ${d.projekt ?? ''} ${d.predmet ?? ''}`).includes(nq));
+  }
+
+  const soucet = vybrane.reduce((a, d) => a + (d.castka ?? 0), 0);
+  const { s: strana, stran, kus } = vyrez(vybrane, params);
+  const roky = [...new Set(ds.items.filter((d) => (d.smer === 'prijata') === prijate)
+    .map((d) => d.rok).filter(Boolean))].sort((a, b) => b - a);
+
+  app.innerHTML = `
+    <p class="nadsekce">Registr smluv</p>
+    <h1>${prijate ? 'Dotace, které Praha 6 dostala' : 'Dotace rozdané Prahou 6'}</h1>
+    <p class="podnadsekce">${prijate
+      ? 'Peníze, které do rozpočtu městské části přitekly odjinud — dotace od hlavního '
+        + 'města i dary, kterými soukromý dárce financuje některý z dotačních programů.'
+      : 'Kdo dostal od městské části dotaci, kdy, na co a kolik. Vytaženo ze smluv '
+        + 'uveřejněných v registru smluv od roku 2016.'}</p>
+
+    ${dotPrepinac(cesta, s)}
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(prijate ? s.prijato.pocet : s.rozdano.pocet)}</div><div class="k">dotačních smluv</div></div>
+      <div><div class="v">${fmtKc(prijate ? s.prijato.castka : s.rozdano.castka)}</div><div class="k">v součtu</div></div>
+      ${prijate ? '' : `<div><div class="v">${fmtCislo(s.prijemcu)}</div><div class="k">různých příjemců</div></div>`}
+      <div><div class="v">${s.roky.length ? `${Math.min(...s.roky)}–${Math.max(...s.roky)}` : '—'}</div><div class="k">rozsah let</div></div>
+    </div>
+
+    ${POZNAMKA_DOTACE}
+
+    <form class="filtry" id="filtry">
+      <select name="rok" aria-label="Rok">
+        <option value="">Všechny roky</option>
+        ${volby(roky, rok)}
+      </select>
+      ${prijate ? '' : `
+      <select name="oblast" aria-label="Oblast">
+        <option value="">Všechny oblasti</option>
+        ${Object.entries(ds.oblasti ?? {}).map(([k, o]) =>
+          `<option value="${esc(k)}"${k === oblast ? ' selected' : ''}>${esc(o.nazev)} (${o.pocet})</option>`).join('')}
+      </select>`}
+      <input type="search" name="q" value="${esc(q)}" placeholder="Příjemce nebo projekt…"
+             aria-label="Hledat v dotacích">
+      <span class="pocet">${fmtCislo(vybrane.length)} dotací · ${fmtKc(soucet)}</span>
+    </form>
+
+    ${seznam(kus, (d) => radekDotace(d, ds, { odkaz: !prijate }), 'Žádná dotace neodpovídá zadání.')}
+    ${strankovani(strana, stran, vybrane.length)}`;
+
+  zapoj(cesta, params);
+}
+
+const radekDotace = (d, ds, { odkaz = true, sPrijemcem = true } = {}) => `
+  <div class="polozka">
+    <div class="meta">${fmtDatum(d.zverejneno ?? d.datum)}</div>
+    <div>
+      <h3><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.projekt ?? d.predmet)}</a></h3>
+      <div class="radek">
+        <span class="castka">${d.castka != null ? fmtKc(d.castka) : 'částka neuvedena'}</span>
+        ${d.prijemce && sPrijemcem ? (odkaz
+          ? `<a class="stitek-odkaz" href="#/dotace?prijemce=${encodeURIComponent(d.prijemceIco || d.prijemce)}">${esc(d.prijemce)}</a>`
+          : `<span>${esc(d.prijemce)}</span>`) : ''}
+        ${d.oblast && d.oblast !== 'ostatni'
+          ? `<span class="stitek${d.oblastZPrijemce ? ' odhad' : ''}"
+               title="${d.oblastZPrijemce ? 'Oblast odvozena z ostatních dotací téhož příjemce' : 'Oblast odvozena z předmětu smlouvy'}">${esc(oblastNazev(ds, d.oblast))}</span>`
+          : ''}
+        ${d.program ? `<span class="stitek program">${esc(d.program)}</span>` : ''}
+      </div>
+      ${d.projekt && d.projekt !== d.predmet ? `<div class="radek tlumene">${esc(d.predmet)}</div>` : ''}
+    </div>
+  </div>`;
+
+function dotacePrijemci(params, ds, cesta) {
+  const s = ds.souhrn;
+  const oblast = params.get('oblast') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrani = ds.prijemci ?? [];
+  if (oblast) vybrani = vybrani.filter((p) => (p.oblasti ?? []).includes(oblast));
+  if (nq) vybrani = vybrani.filter((p) => norm(p.nazev).includes(nq));
+
+  const soucet = vybrani.reduce((a, p) => a + p.castka, 0);
+  const { s: strana, stran, kus } = vyrez(vybrani, params);
+
+  app.innerHTML = `
+    <p class="nadsekce">Registr smluv</p>
+    <h1>Příjemci dotací</h1>
+    <p class="podnadsekce">Spolky, obecně prospěšné společnosti, školy i firmy, které
+    od Prahy 6 dostaly dotaci. Seřazeno podle celkové částky za všechny roky.</p>
+
+    ${dotPrepinac(cesta, s)}
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(vybrani.length)}</div><div class="k">příjemců</div></div>
+      <div><div class="v">${fmtKc(soucet)}</div><div class="k">v součtu</div></div>
+      <div><div class="v">${fmtCislo(vybrani.reduce((a, p) => a + p.pocet, 0))}</div><div class="k">dotačních smluv</div></div>
+    </div>
+
+    ${POZNAMKA_DOTACE}
+
+    <form class="filtry" id="filtry">
+      <select name="oblast" aria-label="Oblast">
+        <option value="">Všechny oblasti</option>
+        ${Object.entries(ds.oblasti ?? {}).map(([k, o]) =>
+          `<option value="${esc(k)}"${k === oblast ? ' selected' : ''}>${esc(o.nazev)}</option>`).join('')}
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Jméno příjemce…" aria-label="Hledat příjemce">
+      <span class="pocet">${fmtCislo(vybrani.length)} příjemců</span>
+    </form>
+
+    ${kus.length === 0 ? '<p class="prazdno">Žádný příjemce neodpovídá zadání.</p>'
+      : `<div class="subjekty">${kus.map((p) => kartaPrijemce(p, ds)).join('')}</div>`}
+    ${strankovani(strana, stran, vybrani.length)}`;
+
+  zapoj(cesta, params);
+}
+
+const kartaPrijemce = (p, ds) => `
+  <a class="subjekt" href="#/dotace?prijemce=${encodeURIComponent(p.ico || p.nazev)}">
+    <div class="subjekt-hlava">
+      <h3>${esc(p.nazev)}</h3>
+      <span class="sipka" aria-hidden="true">→</span>
+    </div>
+    <div class="subjekt-ico">${p.ico ? `IČO ${esc(p.ico)}` : 'bez IČO (fyzická osoba)'}</div>
+    <div class="subjekt-cisla">
+      <span><strong>${fmtKc(p.castka)}</strong> celkem</span>
+      <span><strong>${fmtCislo(p.pocet)}</strong> dotací</span>
+    </div>
+    <div class="subjekt-posledni">${(p.oblasti ?? []).filter((o) => o !== 'ostatni')
+      .map((o) => esc(oblastNazev(ds, o))).join(' · ') || 'oblast neurčena'}</div>
+  </a>`;
+
+function dotacePrijemce(params, ds, cesta) {
+  const klic = params.get('prijemce');
+  const p = (ds.prijemci ?? []).find((x) => x.ico === klic || x.nazev === klic);
+  if (!p) {
+    app.innerHTML = `<h1>Neznámý příjemce</h1>
+      <p class="prazdno">Takový příjemce mezi dotacemi není.
+      <a href="#/dotace-prijemci">Zpět na příjemce</a>.</p>`;
+    return;
+  }
+
+  const jeho = ds.items.filter((d) => d.smer === 'rozdana'
+    && (p.ico ? d.prijemceIco === p.ico : d.prijemce === p.nazev));
+  const poRocich = new Map();
+  for (const d of jeho) {
+    if (!d.rok) continue;
+    poRocich.set(d.rok, (poRocich.get(d.rok) ?? 0) + (d.castka ?? 0));
+  }
+  const roky = [...poRocich.entries()].sort((a, b) => a[0] - b[0]);
+  const max = Math.max(1, ...roky.map(([, v]) => v));
+
+  app.innerHTML = `
+    <p class="nadsekce"><a href="#/dotace-prijemci">← Příjemci dotací</a></p>
+    <h1>${esc(p.nazev)}</h1>
+    <p class="podnadsekce">${p.ico
+      ? `IČO ${esc(p.ico)} · <a href="https://ares.gov.cz/ekonomicke-subjekty?ico=${esc(p.ico)}" target="_blank" rel="noopener">Ověřit v ARES →</a>`
+      : 'Fyzická osoba — registr smluv u ní neuvádí IČO.'}</p>
+
+    <div class="karty">
+      <div><div class="v">${fmtKc(p.castka)}</div><div class="k">dostal celkem</div></div>
+      <div><div class="v">${fmtCislo(p.pocet)}</div><div class="k">dotací</div></div>
+      <div><div class="v">${fmtDatum(p.prvni)}</div><div class="k">první dotace</div></div>
+      <div><div class="v">${fmtDatum(p.posledni)}</div><div class="k">poslední dotace</div></div>
+    </div>
+
+    ${p.sCastkou < p.pocet
+      ? `<p class="poznamka">U ${fmtCislo(p.pocet - p.sCastkou)} z ${fmtCislo(p.pocet)} smluv
+         není v registru uvedená částka, takže součet je spodní hranicí.</p>` : ''}
+
+    ${roky.length > 1 ? `
+    <h2>Podle roku</h2>
+    <div class="grafy">
+      ${roky.map(([r, v]) => pruhKc(String(r), v, max, p.castka)).join('')}
+    </div>` : ''}
+
+    <h2>Jednotlivé dotace</h2>
+    ${seznam(jeho, (d) => radekDotace(d, ds, { sPrijemcem: false }), 'Žádné dotace.')}`;
+}
+
 // ------------------------------------------------------------ úřední deska ---
 async function deska(params) {
   const ds = await nacti('deska.json').catch(() => null);
@@ -707,6 +956,22 @@ function pruh(popis, hodnota, zaklad, { neurcite = false } = {}) {
 }
 
 const neurcitaKategorie = (popis) => /nezjištěno/i.test(popis ?? '');
+
+/**
+ * Proužek pro peníze. Šířka se měří k nejvyššímu roku (aby byl graf čitelný),
+ * ale procento se počítá z celku — podíl na maximu by nic neříkal.
+ */
+function pruhKc(popis, hodnota, max, celkem) {
+  const sirka = max ? (hodnota / max) * 100 : 0;
+  const podil = celkem ? hodnota / celkem : 0;
+  const procenta = podil === 0 ? '0 %' : podil < 0.005 ? '< 1 %' : `${Math.round(podil * 100)} %`;
+  return `
+    <div class="graf-radek" title="${esc(`${popis}: ${fmtKc(hodnota)}`)}">
+      <div class="graf-popis">${esc(popis)}</div>
+      <div class="graf-drah"><span class="graf-pruh" style="width:${sirka.toFixed(2)}%"></span></div>
+      <div class="graf-hodnota"><strong>${fmtKc(hodnota)}</strong><span>${procenta}</span></div>
+    </div>`;
+}
 
 const pruhy = (polozky, zaklad) =>
   `<div class="grafy">${polozky.map((p) =>
