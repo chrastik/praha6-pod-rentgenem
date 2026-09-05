@@ -1,0 +1,52 @@
+name: Sčítání 2021
+# Stáhne data ze SLDB 2021 (ČSÚ) pro MČ Praha 6 a publikuje web.
+# NENÍ na cronu: data jsou z rozhodného okamžiku 26. 3. 2021 a už se nemění.
+# Spouští se změnou souboru .scitani (stačí do něj zapsat dnešní datum a commitnout).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.scitani'
+      - 'scripts/sync-scitani.mjs'
+      - 'scripts/lib/scitani.mjs'
+      - 'scripts/lib/csv.mjs'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync
+
+jobs:
+  scitani:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Stažení dat ze sčítání
+        run: node scripts/sync-scitani.mjs
+
+      - name: Build indexu (obnoví manifest a časové razítko)
+        if: always()
+        continue-on-error: true
+        run: node scripts/build-index.mjs
+
+      - name: Commit dat
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Sčítání 2021 ($(TZ=Europe/Prague date +%F))"
+          git push || true
+
+  publikovat:
+    needs: scitani
+    if: always()
+    uses: ./.github/workflows/pages.yml
