@@ -45,13 +45,29 @@ const cislo = (v) => {
  * Zpracuje jeden <zaznam> (z dumpu) i samostatné XML detailu smlouvy.
  * Struktura registru: <zaznam><identifikator><idSmlouvy>…  <smlouva><subjekt>…
  * <smluvniStrana>…  Publikující subjekt je naše MČ, protistrana je ta druhá.
+ *
+ * POZOR NA DVĚ RŮZNÁ ID. Záznam má `idSmlouvy` (identita smlouvy napříč verzemi)
+ * a `idVerze` (konkrétní zveřejněná verze). Web registru adresuje smlouvy podle
+ * VERZE — /smlouva/{idVerze}. Když se do odkazu dá idSmlouvy, odkaz zdánlivě
+ * funguje, ale ukáže úplně cizí smlouvu, protože to číslo je něčí jiné idVerze.
+ * Přesně tak vznikly odkazy vedoucí na Nemocnici Na Homolce a Technické služby
+ * Zlín. Proto se odkaz bere z elementu <odkaz>, který registr sám posílá.
  */
 function parseZaznam(xml) {
   const identBlok = tag(xml, 'identifikator') ?? '';
-  const id = tag(identBlok, 'idSmlouvy') ?? tag(identBlok, 'idVerze')
-    ?? /\/smlouva\/(\d+)/.exec(tag(xml, 'odkaz') ?? '')?.[1]
+  const idSmlouvy = tag(identBlok, 'idSmlouvy');
+  const idVerze = tag(identBlok, 'idVerze');
+  const odkaz = tag(xml, 'odkaz');
+  const idZOdkazu = /\/smlouva\/(\d+)/.exec(odkaz ?? '')?.[1] ?? null;
+
+  // Identita záznamu (kvůli slučování napříč běhy) = idSmlouvy.
+  const id = idSmlouvy ?? idVerze ?? idZOdkazu
     ?? (/^\d+$/.test(identBlok) ? identBlok : null);
   if (!id) return null;
+
+  // Adresa na webu registru = vždy verze. Nejjistější je odkaz od registru;
+  // když chybí, poskládá se z idVerze. idSmlouvy se do URL nesmí dostat.
+  const idProUrl = idZOdkazu ?? idVerze ?? null;
 
   const smlouva = tag(xml, 'smlouva') ?? xml;
 
@@ -71,7 +87,8 @@ function parseZaznam(xml) {
     mena: tag(smlouva, 'mena') ?? 'CZK',
     protistrana: protistrana.nazev ?? null,
     protistranaIco: protistrana.ico ?? null,
-    url: `${BASE}/smlouva/${id}`,
+    idVerze: idVerze ?? idZOdkazu ?? null,
+    url: idProUrl ? `${BASE}/smlouva/${idProUrl}` : null,
   };
 }
 
@@ -105,11 +122,19 @@ async function prirustek() {
     try {
       const xml = await fetchText(`${BASE}/smlouva/${id}/xml/registr_smluv_smlouva_${id}.xml`);
       const s = parseZaznam(xml);
-      znami.set(id, { ...(s ?? {}), id, url: `${BASE}/smlouva/${id}`, zdroj: 'live' });
+      if (!s) throw new Error('XML se nepodařilo rozebrat');
+      // Klíčem je vždy idSmlouvy z parseZaznam, ne ID verze z vyhledávání —
+      // jinak by tatáž smlouva byla v datech dvakrát: jednou z přírůstku
+      // a jednou z dumpu, pod dvěma různými čísly.
+      znami.set(s.id, { ...s, zdroj: 'live' });
       novych++;
     } catch (err) {
       console.warn(`  ! smlouva ${id}: ${err.message}`);
-      if (!znami.has(id)) znami.set(id, { id, url: `${BASE}/smlouva/${id}`, zdroj: 'live-neuplna' });
+      // Nouzový záznam nese ID verze; při ukládání se zahodí, jakmile
+      // se tatáž smlouva objeví celá.
+      if (!znami.has(id)) {
+        znami.set(id, { id, idVerze: id, url: `${BASE}/smlouva/${id}`, zdroj: 'live-neuplna' });
+      }
     }
   });
   console.log(`  nově stažených detailů: ${novych}`);
@@ -119,8 +144,20 @@ async function prirustek() {
 // ------------------------------------------------------------------ backfill ---
 async function backfill() {
   const index = await fetchText(`${DUMP_BASE}/index.xml`);
-  const soubory = [...new Set([...index.matchAll(/dump_(\d{4})_(\d{2})\.xml/g)].map((m) => m[0]))].sort();
-  console.log(`  ${soubory.length} měsíčních dumpů v indexu`);
+  let soubory = [...new Set([...index.matchAll(/dump_(\d{4})_(\d{2})\.xml/g)].map((m) => m[0]))].sort();
+
+  // Celý registr od roku 2016 se do jednoho běhu Actions nemusí vejít. ROK_OD/ROK_DO
+  // umožní projet historii po dávkách, každou v samostatném běhu, který se commitne.
+  const rokOd = Number(process.env.ROK_OD ?? 0);
+  const rokDo = Number(process.env.ROK_DO ?? 9999);
+  if (rokOd || rokDo !== 9999) {
+    soubory = soubory.filter((f) => {
+      const r = Number(/dump_(\d{4})_/.exec(f)[1]);
+      return r >= rokOd && r <= rokDo;
+    });
+  }
+  console.log(`  ${soubory.length} měsíčních dumpů ke zpracování`
+    + (rokOd || rokDo !== 9999 ? ` (roky ${rokOd || '…'}–${rokDo === 9999 ? '…' : rokDo})` : ''));
 
   for (const soubor of soubory) {
     if (stav[soubor]?.hotovo && !process.env.FORCE) continue;
@@ -174,15 +211,25 @@ async function projdiDumpProudove(url) {
 
 // ----------------------------------------------------------------- uložení ---
 async function uloz() {
+  // Zahodit nouzové záznamy, ke kterým už existuje úplná smlouva se stejnou verzí.
+  const uplneVerze = new Set(
+    [...znami.values()].filter((s) => s.zdroj !== 'live-neuplna' && s.idVerze).map((s) => s.idVerze),
+  );
+  for (const [k, s] of znami) {
+    if (s.zdroj === 'live-neuplna' && uplneVerze.has(s.idVerze)) znami.delete(k);
+  }
+
   const items = [...znami.values()].sort((a, b) =>
     (b.zverejneno ?? b.datum ?? '').localeCompare(a.zverejneno ?? a.datum ?? ''));
-  const sCastkou = items.filter((s) => s.castkaBezDph != null);
+  // Do součtu jen koruny — smlouva v dolarech přičtená k Kč je nesmysl.
+  const sCastkou = items.filter((s) => s.castkaBezDph != null && (s.mena ?? 'CZK') === 'CZK');
   await writeDataset('smlouvy', items, {
     ico: ICO,
     dumpStav: stav,
     souhrn: {
       sHodnotou: sCastkou.length,
       celkovaHodnota: sCastkou.reduce((a, s) => a + s.castkaBezDph, 0),
+      vCiziMene: items.filter((s) => s.castkaBezDph != null && (s.mena ?? 'CZK') !== 'CZK').length,
     },
   });
 }
