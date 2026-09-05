@@ -70,12 +70,34 @@ export function stripHtml(html) {
     .trim();
 }
 
+/**
+ * Pojmenované entity s diakritikou. Většina zdrojů posílá rovnou UTF-8, ale
+ * některé exporty sázejí `&aacute;` — a nedekódovaná entita v názvu organizace
+ * není vidět jako chyba, jen jako ošklivý text, který se nikdy neopraví.
+ */
+const ENTITY_DIAKRITIKA = {
+  aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', yacute: 'ý',
+  Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Yacute: 'Ý',
+  ccaron: 'č', dcaron: 'ď', ecaron: 'ě', ncaron: 'ň', rcaron: 'ř',
+  scaron: 'š', tcaron: 'ť', zcaron: 'ž',
+  Ccaron: 'Č', Dcaron: 'Ď', Ecaron: 'Ě', Ncaron: 'Ň', Rcaron: 'Ř',
+  Scaron: 'Š', Tcaron: 'Ť', Zcaron: 'Ž',
+  uring: 'ů', Uring: 'Ů', ouml: 'ö', Ouml: 'Ö', uuml: 'ü', Uuml: 'Ü',
+  ndash: '–', mdash: '—', hellip: '…', bdquo: '„', ldquo: '“', rdquo: '”',
+  lsquo: '‚', rsquo: '’', laquo: '«', raquo: '»', middot: '·', shy: '',
+};
+
 export function decodeEntities(s) {
-  const named = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: ' ' };
+  const named = {
+    quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: ' ',
+    ...ENTITY_DIAKRITIKA,
+  };
   return s
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
-    .replace(/&([a-z]+);/gi, (m, n) => named[n.toLowerCase()] ?? m);
+    // Nejdřív přesná shoda — u entit s diakritikou nese velikost písmene význam
+    // (&Aacute; je Á, ne á), takže se nesmí hned zahodit lowercasem.
+    .replace(/&([a-z]+);/gi, (m, n) => named[n] ?? named[n.toLowerCase()] ?? m);
 }
 
 /** "20. 4. 2026" | "20.4.2026" | "2026-04-20" → "2026-04-20" */
