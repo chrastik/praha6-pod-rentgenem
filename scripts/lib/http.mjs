@@ -23,12 +23,18 @@ export async function fetchText(url, opts = {}) {
   const {
     retries = 4, timeoutMs = 45_000, cache = process.env.HTTP_CACHE === '1',
     headers = {}, method = 'GET', body,
+    // Vrátí { text, hlavicky } místo holého textu. Potřeba tam, kde si server
+    // drží stav v session a musíme si přenášet cookie (vyhledávání registru smluv).
+    vratHlavicky = false,
   } = opts;
 
   const key = createHash('sha1').update(method + url + (body ?? '')).digest('hex');
   const cacheFile = path.join(CACHE_DIR, `${key}.txt`);
   if (cache) {
-    try { return await readFile(cacheFile, 'utf8'); } catch { /* miss */ }
+    try {
+      const z = await readFile(cacheFile, 'utf8');
+      return vratHlavicky ? { text: z, hlavicky: new Headers() } : z;
+    } catch { /* miss */ }
   }
 
   let lastErr;
@@ -53,7 +59,7 @@ export async function fetchText(url, opts = {}) {
         await mkdir(CACHE_DIR, { recursive: true });
         await writeFile(cacheFile, text, 'utf8');
       }
-      return text;
+      return vratHlavicky ? { text, hlavicky: res.headers } : text;
     } catch (err) {
       lastErr = err;
       if (err instanceof HttpError && err.status < 500 && err.status !== 429) throw err;

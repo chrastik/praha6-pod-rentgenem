@@ -17,16 +17,24 @@ import { decodeEntities, stripHtml } from './util.mjs';
 
 const BASE = 'https://smlouvy.gov.cz';
 
-/** Sestaví URL jedné stránky výsledků pro dané IČO publikujícího subjektu. */
-export function urlVysledku(ico, offset = 0, limit = 100) {
-  const p = new URLSearchParams({
-    subject_idnum: ico,
-    'searchResultList-limit': String(limit),
-    'searchResultList-offset': String(offset),
-    do: 'searchResultList-setOffset',
-  });
+/**
+ * URL vyhledávání pro jedno IČO publikujícího subjektu.
+ *
+ * `signal` je Nette signál datagridu. BEZ session cookie server signál odmítne
+ * a vrátí stránku úplně bez tabulky — což vypadá jako „ten subjekt nic
+ * nepublikuje". První dotaz proto musí jít bez signálu, teprve pak se dá
+ * s získanou cookie stránkovat.
+ */
+export function urlVysledku(ico, { offset = null, limit = null, signal = null } = {}) {
+  const p = new URLSearchParams({ subject_idnum: ico });
+  if (limit != null) p.set('searchResultList-limit', String(limit));
+  if (offset != null) p.set('searchResultList-offset', String(offset));
+  if (signal) p.set('do', signal);
   return `${BASE}/vyhledavani?${p}`;
 }
+
+/** Povolené velikosti stránky podle odkazů v samotném datagridu. */
+export const LIMIT_STRANKY = 500;
 
 const bunky = (radek) =>
   [...radek.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
