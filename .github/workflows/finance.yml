@@ -1,0 +1,56 @@
+name: Rozpočet a faktury
+# Stáhne rozpočet a faktury z CityVizoru znovu a celé je přepíše.
+# Spouští se změnou souboru .finance (běžně to jede v týdenní aktualizaci).
+#
+# ALLOW_SHRINK je tu schválně: oprava duplicit sníží počet faktur o víc než
+# pětinu a pojistka v writeDataset by zápis jinak odmítla. Proto to není
+# v týdenní aktualizaci — tam má pojistka zůstat zapnutá.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.finance'
+      - 'scripts/sync-finance.mjs'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync
+
+jobs:
+  finance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Rozpočet a faktury (CityVizor)
+        env:
+          ALLOW_SHRINK: '1'
+        run: node scripts/sync-finance.mjs
+
+      - name: Build indexu
+        if: always()
+        continue-on-error: true
+        run: node scripts/build-index.mjs
+
+      - name: Commit dat
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Rozpočet a faktury ($(TZ=Europe/Prague date +%F))"
+          git pull --rebase --autostash || true
+          git push || true
+
+  publikovat:
+    needs: finance
+    if: always()
+    uses: ./.github/workflows/pages.yml
