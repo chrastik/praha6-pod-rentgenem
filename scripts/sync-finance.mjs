@@ -35,10 +35,25 @@ let obdobi = [];
 try { obdobi = await fetchJson(`${API}/profiles/${id}/payments/months`); }
 catch (err) { console.warn(`  ! seznam období faktur: ${err.message}`); }
 
+/**
+ * CityVizor vrací mezi obdobími i prázdný záznam { month: null, year: null }.
+ * Když se z něj poskládá datum, vyjde „[object Object]-01-01“ — a API takový
+ * nesmysl NEODMÍTNE. Vrátí HTTP 200 a vysype 10 000 plateb, které se pak
+ * přičtou k platbám staženým po měsících. Přesně tak vzniklo 9 877 duplicit
+ * a výdaje nafouknuté o 1,1 miliardy. Proto se období bez roku přeskakují.
+ */
+const platneObdobi = obdobi.filter((o) => {
+  const rok = Number(o?.year ?? o?.rok);
+  return Number.isInteger(rok) && rok >= 2000 && rok <= 2100;
+});
+if (platneObdobi.length !== obdobi.length) {
+  console.log(`  přeskočeno ${obdobi.length - platneObdobi.length} období bez roku`);
+}
+
 const faktury = [];
-for (const o of obdobi) {
-  const rok = o.year ?? o.rok ?? o;
-  const mesic = o.month ?? o.mesic;
+for (const o of platneObdobi) {
+  const rok = Number(o.year ?? o.rok);
+  const mesic = Number(o.month ?? o.mesic) || null;
   const od = mesic ? `${rok}-${String(mesic).padStart(2, '0')}-01` : `${rok}-01-01`;
   const doDate = mesic
     ? new Date(Date.UTC(rok, mesic, 0)).toISOString().slice(0, 10)
@@ -71,21 +86,30 @@ const fakturyNormalizovane = faktury
   }))
   .sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? ''));
 
-const celkemVydaje = fakturyNormalizovane.reduce((a, f) => a + f.vydaj, 0);
+// Druhá pojistka: kdyby se období někdy začala překrývat jinak, ať se to
+// neprojeví na součtech. Klíčem je celý obsah řádku — dvě opravdu totožné
+// platby ve stejný den se stejným popisem i částkou jsou v praxi tentýž doklad.
+const klic = (f) => JSON.stringify([f.datum, f.dodavatel, f.ico, f.popis, f.vydaj, f.prijem, f.paragraf, f.polozka, f.akce]);
+const bezDuplicit = [...new Map(fakturyNormalizovane.map((f) => [klic(f), f])).values()];
+if (bezDuplicit.length !== fakturyNormalizovane.length) {
+  console.log(`  odstraněno ${fakturyNormalizovane.length - bezDuplicit.length} duplicitních řádků`);
+}
+
+const celkemVydaje = bezDuplicit.reduce((a, f) => a + f.vydaj, 0);
 console.log(`  výdaje celkem: ${Math.round(celkemVydaje).toLocaleString('cs-CZ')} Kč`);
 
 await writeDataset('rozpocet', Object.entries(rozpocet).map(([rok, polozky]) => ({
   rok: Number(rok), polozky,
 })), { profil: { id, ico: profil.ico ?? null, slug: SLUG }, roky: dostupneRoky });
 
-await writeDataset('faktury', fakturyNormalizovane, {
+await writeDataset('faktury', bezDuplicit, {
   profil: { id, slug: SLUG },
   obdobi: obdobi.length,
   souhrn: {
     celkemVydaje,
     rozsah: {
-      od: fakturyNormalizovane.at(-1)?.datum ?? null,
-      do: fakturyNormalizovane[0]?.datum ?? null,
+      od: bezDuplicit.at(-1)?.datum ?? null,
+      do: bezDuplicit[0]?.datum ?? null,
     },
   },
 });
