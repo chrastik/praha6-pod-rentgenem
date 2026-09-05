@@ -6,7 +6,10 @@
 <title>Praha 6 pod rentgenem</title>
 <meta name="description" content="Usnesení, rozpočet, faktury a smlouvy městské části Praha 6 na jednom místě, s dohledatelným zdrojem.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css">
+<!-- ?v= se zvyšuje při každé změně app.js nebo style.css. Bez toho
+     prohlížeč vrátivšího se návštěvníka drží starou verzi a změna
+     na webu prostě není vidět. -->
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <a class="skip" href="#obsah">Přeskočit na obsah</a>
@@ -61,6 +64,6 @@
   </div>
 </footer>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=2"></script>
 </body>
 </html>
