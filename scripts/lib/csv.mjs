@@ -28,10 +28,9 @@ export function parseRadek(radek) {
 }
 
 /**
- * Stáhne CSV a zavolá `chce(zaznam)` pro každý řádek. Vrací jen ty, které projdou.
- * @param {(z: Record<string,string>) => boolean} chce
+ * Jeden pokus o stažení a přečtení celého souboru.
  */
-export async function ctiCsvProudove(url, chce, { ua = 'praha6-pod-rentgenem/0.1' } = {}) {
+async function jedenPruchod(url, chce, ua) {
   const res = await fetch(url, { headers: { 'user-agent': ua } });
   if (!res.ok) throw new Error(`HTTP ${res.status} — ${url}`);
 
@@ -64,4 +63,30 @@ export async function ctiCsvProudove(url, chce, { ua = 'praha6-pod-rentgenem/0.1
   zpracujRadek(zbytek + dekoder.decode());
 
   return { radky: vysledek, prohlednuto: radku, mb: bajtu / 1048576 };
+}
+
+/**
+ * Stáhne CSV a zavolá `chce(zaznam)` pro každý řádek. Vrací jen ty, které projdou.
+ *
+ * Server ČSÚ u velkých souborů občas zavře spojení uprostřed přenosu
+ * (UND_ERR_SOCKET „other side closed“). Range requesty nepodporuje, takže
+ * jediná spolehlivá obrana je stáhnout soubor znovu od začátku; parsování je
+ * čistá funkce bez vedlejších účinků, takže opakování nic nerozbije.
+ *
+ * @param {(z: Record<string,string>) => boolean} chce
+ */
+export async function ctiCsvProudove(url, chce, { ua = 'praha6-pod-rentgenem/0.1', pokusu = 4 } = {}) {
+  let posledni;
+  for (let pokus = 1; pokus <= pokusu; pokus++) {
+    try {
+      return await jedenPruchod(url, chce, ua);
+    } catch (e) {
+      posledni = e;
+      if (pokus === pokusu) break;
+      const cekat = 3000 * pokus;
+      console.warn(`    pokus ${pokus}/${pokusu} selhal (${e.message}), zkouším znovu za ${cekat / 1000} s`);
+      await new Promise((r) => setTimeout(r, cekat));
+    }
+  }
+  throw new Error(`${url}: nepodařilo se stáhnout ani na ${pokusu}. pokus — ${posledni?.message}`);
 }
