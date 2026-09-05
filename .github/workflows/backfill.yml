@@ -13,6 +13,11 @@ on:
         description: 'Do roku včetně (prázdné = do konce)'
         required: false
         default: ''
+  # Ruční spuštění přes soubor: tlačítko „Run workflow" je na tomhle repozitáři
+  # nespolehlivé, commit funguje vždycky.
+  push:
+    branches: [main]
+    paths: ['.backfill']
 
 permissions:
   contents: write
@@ -36,6 +41,9 @@ jobs:
         env:
           ROK_OD: ${{ inputs.rok_od }}
           ROK_DO: ${{ inputs.rok_do }}
+          # Bez FORCE by se přeskočily měsíce označené jako hotové a oprava
+          # odkazů by se do už stažených smluv nepromítla.
+          FORCE: '1'
         run: BACKFILL=1 node scripts/sync-smlouvy.mjs
 
       - name: Build indexu
