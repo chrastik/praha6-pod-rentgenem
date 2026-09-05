@@ -156,9 +156,16 @@ async function domu() {
   const m = manifest;
   const d = m.datasety ?? {};
   app.innerHTML = `
-    <h1>Veřejná data městské části Praha 6</h1>
-    <p class="podnadpis">Usnesení rady a zastupitelstva, rozpočet, faktury a smlouvy
-    na jednom místě — u každého záznamu odkaz na originální zdroj.</p>
+    <div class="hero">
+      <img class="hero-logo" src="logo-jsme-280.png"
+           srcset="logo-jsme-280.png 1x, logo-jsme-560.png 2x"
+           width="280" height="219" alt="JSME PRAHA 6" decoding="async">
+      <div class="hero-text">
+        <h1>Veřejná data městské části Praha 6<span class="hero-nazev">Praha 6 pod rentgenem</span></h1>
+        <p class="podnadpis">Usnesení rady a zastupitelstva, rozpočet, faktury a smlouvy
+        na jednom místě — u každého záznamu odkaz na originální zdroj.</p>
+      </div>
+    </div>
     <div class="karty">
       <div><div class="v">${fmtCislo(m.usneseni.pocet)}</div><div class="k">usnesení ${m.usneseni.rozsah?.od?.slice(0, 4) ?? ''}–${m.usneseni.rozsah?.do?.slice(0, 4) ?? ''}</div></div>
       <div><div class="v">${fmtCislo(d.smlouvy?.pocet)}</div><div class="k">smluv v registru</div></div>

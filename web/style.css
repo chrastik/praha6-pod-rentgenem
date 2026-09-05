@@ -3,6 +3,7 @@
   --ink:#15191c; --muted:#5a656c; --faint:#88929a;
   --rule:#d5dade; --accent:#1f4b8f; --accent-soft:#e4eaf4;
   --zmc:#8a3d12; --rmc:#1f4b8f;
+  --znacka:#0f7f9e;
 }
 @media (prefers-color-scheme: dark){
   :root{
@@ -10,6 +11,7 @@
     --ink:#e4e9ec; --muted:#98a3ab; --faint:#6b767e;
     --rule:#2b333a; --accent:#7fa7e0; --accent-soft:#1b2a3d;
     --zmc:#e0a07a; --rmc:#7fa7e0;
+    --znacka:#5cc0dd;
   }
 }
 *{box-sizing:border-box}
@@ -29,8 +31,12 @@ a{color:var(--accent)}
 
 .hlavicka{background:var(--surface);border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:5}
 .hlavicka .wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-block:12px}
-.znacka{font-weight:700;font-size:1.05rem;text-decoration:none;color:var(--ink);letter-spacing:-.01em}
-.znacka span{color:var(--muted);font-weight:500}
+.znacka{
+  display:inline-flex;align-items:center;gap:11px;
+  font-weight:700;font-size:1.05rem;text-decoration:none;color:var(--ink);letter-spacing:-.01em;
+}
+.znacka .znak{height:40px;width:auto;display:block;flex:none}
+.znacka .jmeno span{color:var(--muted);font-weight:500}
 .hlavicka nav{display:flex;gap:16px;flex-wrap:wrap}
 .hlavicka nav a{font-size:.9rem;text-decoration:none;color:var(--muted)}
 .hlavicka nav a:hover,.hlavicka nav a[aria-current]{color:var(--ink);text-decoration:underline}
@@ -41,6 +47,26 @@ a{color:var(--accent)}
 }
 
 main{padding-block:32px 64px}
+
+/* ---- úvodní hlavička s logem ---- */
+.hero{
+  display:flex;align-items:center;gap:clamp(20px,4vw,40px);
+  flex-wrap:wrap;margin-bottom:clamp(24px,4vw,38px);
+}
+.hero-logo{width:clamp(132px,17vw,192px);height:auto;flex:none}
+.hero-text{flex:1 1 20rem;min-width:0}
+.hero h1{
+  font-size:clamp(1.6rem,4.2vw,2.5rem);line-height:1.12;margin:0 0 .45em;
+  letter-spacing:-.022em;
+}
+/* Název projektu jako druhý řádek nadpisu — vizuálně to spojí, co web ukazuje,
+   s tím, jak se jmenuje. */
+.hero-nazev{
+  display:block;color:var(--znacka);
+  font-size:clamp(1.9rem,5.4vw,3.1rem);line-height:1.04;letter-spacing:-.028em;
+  margin-top:.12em;
+}
+.hero .podnadpis{margin-bottom:0}
 h1{font-size:1.9rem;letter-spacing:-.02em;margin:0 0 .3em;text-wrap:balance}
 h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 .podnadpis{color:var(--muted);margin:0 0 1.6em;max-width:62ch}
@@ -99,9 +125,18 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 
 .paticka{border-top:1px solid var(--rule);background:var(--surface);padding-block:22px;font-size:.85rem;color:var(--muted)}
 .paticka p{margin:0 0 .5em;max-width:70ch}
+.provozovatel{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:.9em 0 .5em}
+.provozovatel p{margin:0;flex:1 1 22rem}
+.paticka-logo{width:104px;height:auto;flex:none;opacity:.92}
 .drobne{font-size:.78rem;color:var(--faint)}
 
 @media (max-width:640px){
+  .znacka{font-size:1rem;gap:9px}
+  .znacka .znak{height:34px}
+  .hero{gap:16px}
+  .hero-logo{width:110px}
+  .provozovatel{gap:14px}
+  .paticka-logo{width:86px}
   .hledat{margin-left:0;width:100%}
   .hledat input{width:100%}
   .polozka{grid-template-columns:1fr;gap:4px}
