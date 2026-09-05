@@ -43,9 +43,6 @@ export function vycisti(text) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** Poznáme dotační smlouvu podle předmětu. */
-export const jeDotace = (predmet) => /dotac|grant/.test(bezDiakritiky(predmet));
-
 /**
  * Oblasti podle klíčových slov v předmětu. Pořadí rozhoduje — první shoda
  * vyhrává, proto jdou konkrétnější dřív než obecnější (třeba „hospic“ před
@@ -89,6 +86,9 @@ export const PROGRAMY = [
   ['Kultura I. a II.', /\bkultura\s+(i{1,2})\./],
   ['Sport a volný čas na Šestce', /sport\s+a\s+volny\s+cas\s+na\s+sestce/],
   ['Podpora sportovní identity', /sportovni\s+identit/],
+  ['Podpora pravidelné činnosti', /(podpora\s+)?pravideln\w*\s+cinnost/],
+  ['Jednorázové aktivity', /jednorazov\w*\s+aktivit|podpora\s+jednorazov/],
+  ['Senior a handicap', /senior\s*(a|&amp;|&)\s*handicap/],
   ['Sociální a návazné služby', /navazn\w*\s+sluzeb|v\s+socialni\s+oblasti|socialnich\s+a\s+navazn/],
   ['Památková dotace', /pamatkov\w*\s+dotac/],
   ['Podpora hospicové péče', /hospic/],
@@ -102,6 +102,43 @@ export function urciProgram(predmet) {
   for (const [nazev, re] of PROGRAMY) if (re.test(n)) return nazev;
   return null;
 }
+
+/**
+ * Smlouvy, které slovo „dotace“ obsahují, ale dotací nejsou: radnice si u nich
+ * kupuje SLUŽBU související s dotací (zpracování žádosti, poradenství), nebo
+ * jde o objednávku a jiný typ smlouvy. Sem patří i past se jménem dodavatele —
+ * „Erste Grantika Advisory“ obsahuje „grant“, a přitom nic nedostává.
+ */
+const NENI_DOTACE = new RegExp([
+  '^\\s*objednavk', 'smlouva\\s+o\\s+dilo', 'najemni\\s+smlouva', 'rezervacni\\s+smlouva',
+  'dohoda\\s+o\\s+narovnani', 'kupni\\s+smlouva',
+  'poradensk', 'konzultac', 'administrac\\w*\\s+dotac', 'dotacni\\s+management',
+  'zpracovani\\s+zadost', 'zadost\\w*\\s+o\\s+dotac', 'zajisteni\\s+komplexnich',
+].join('|'));
+
+/**
+ * Poznáme dotační smlouvu.
+ *
+ * Nestačí hledat slovo „dotace“ — radnice velkou část dotačních smluv
+ * pojmenovává jenom programem a příjemcem:
+ *   „Šestka kulturní I. - 2026 - Ostrovy s.r.o - United Island Klubová noc“
+ * Takových bylo přes šest set a v přehledu úplně chyběly. Proto se hledá
+ * i podle názvů dotačních programů městské části.
+ */
+export function jeDotace(predmet) {
+  return zpusobRozpoznani(predmet) !== null;
+}
+
+/** Vrací 'slovo' | 'program' | null — podle čeho jsme dotaci poznali. */
+export function zpusobRozpoznani(predmet) {
+  const n = bezDiakritiky(predmet);
+  if (!n) return null;
+  if (NENI_DOTACE.test(n)) return null;
+  if (/dotac|grant/.test(n)) return 'slovo';
+  if (PROGRAMY.some(([, re]) => re.test(n))) return 'program';
+  return null;
+}
+
 
 /**
  * Název projektu z předmětu. Nejčastější tvary:
@@ -141,7 +178,8 @@ export function sestav(smlouvy) {
   const items = [];
 
   for (const s of smlouvy) {
-    if (!jeDotace(s.predmet)) continue;
+    const detekce = zpusobRozpoznani(s.predmet);
+    if (!detekce) continue;
 
     const predmet = vycisti(s.predmet);
     const prijemce = vycisti(s.protistrana) || null;
@@ -162,6 +200,7 @@ export function sestav(smlouvy) {
 
     items.push({
       id: s.id,
+      detekce,
       smer,
       datum: s.datum ?? null,
       zverejneno: s.zverejneno ?? null,
@@ -248,6 +287,7 @@ export function sestav(smlouvy) {
       sProjektem: rozdane.filter((d) => d.projekt).length,
       oblastZPrijemce: rozdane.filter((d) => d.oblastZPrijemce).length,
       nezarazeno: rozdane.filter((d) => d.oblast === 'ostatni').length,
+      podleProgramu: rozdane.filter((d) => d.detekce === 'program').length,
     },
   };
 }
@@ -266,6 +306,15 @@ export function zkontroluj(d) {
   }
   const zbylaEntita = d.items.find((x) => /&(amp|quot|lt|gt|nbsp);/i.test(x.predmet ?? ''));
   if (zbylaEntita) potize.push(`v předmětu zůstala HTML entita: „${zbylaEntita.predmet.slice(0, 60)}“`);
+  // Velká část dotačních smluv nemá v předmětu slovo „dotace“, jen název
+  // programu. Když jich najednou nenajdeme ani jednu, znamená to, že se
+  // rozpoznávání podle programů rozbilo — a v přehledu by tiše zmizelo
+  // přes šest set dotací, přesně jako se to jednou stalo.
+  if (d.souhrn.rozdano.pocet > 100 && d.souhrn.podleProgramu === 0) {
+    potize.push('ani jedna dotace nebyla rozpoznána podle názvu programu — '
+      + 'rozpoznávání programů je nejspíš rozbité');
+  }
+
   const mcJakoPrijemce = d.prijemci.find((p) => p.ico === ICO_MC);
   if (mcJakoPrijemce) potize.push('městská část je vedená jako příjemce vlastní dotace — rozpadlo se rozlišení směru');
   return potize;
