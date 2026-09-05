@@ -16,7 +16,7 @@
     "merge": "node scripts/merge-usneseni.mjs",
     "index": "node scripts/build-index.mjs",
     "validate": "node scripts/validate.mjs",
-    "test": "node tests/test-organizace.mjs && node tests/test-dotace.mjs",
+    "test": "node tests/test-organizace.mjs && node tests/test-dotace.mjs && node tests/test-smlouvy.mjs",
     "probe": "node scripts/probe-sources.mjs",
     "daily": "npm run sync:usneseni-marbes && npm run sync:deska && npm run sync:smlouvy && npm run merge && npm run index && npm run validate"
   },
