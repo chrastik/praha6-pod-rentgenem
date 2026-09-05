@@ -638,7 +638,7 @@ const DOT_STRANKY = {
 const dotPrepinac = (aktivni, s) => `
   <div class="prepinac" role="tablist">
     <a href="#/dotace" role="tab"${aktivni === '/dotace' ? ' aria-selected="true"' : ''}>
-      Rozdané dotace <span class="cislo">${fmtCislo(s.rozdano.pocet)}</span></a>
+      Přidělené dotace <span class="cislo">${fmtCislo(s.rozdano.pocet)}</span></a>
     <a href="#/dotace-prijemci" role="tab"${aktivni === '/dotace-prijemci' ? ' aria-selected="true"' : ''}>
       Příjemci <span class="cislo">${fmtCislo(s.prijemcu)}</span></a>
     <a href="#/dotace-prijate" role="tab"${aktivni === '/dotace-prijate' ? ' aria-selected="true"' : ''}>
@@ -696,7 +696,7 @@ function dotaceSeznam(params, ds, cesta, prijate) {
 
   app.innerHTML = `
     <p class="nadsekce">Registr smluv</p>
-    <h1>${prijate ? 'Dotace, které Praha 6 dostala' : 'Dotace rozdané Prahou 6'}</h1>
+    <h1>${prijate ? 'Dotace, které Praha 6 dostala' : 'Dotace přidělené Prahou 6'}</h1>
     <p class="podnadsekce">${prijate
       ? 'Peníze, které do rozpočtu městské části přitekly odjinud — dotace od hlavního '
         + 'města i dary, kterými soukromý dárce financuje některý z dotačních programů.'
