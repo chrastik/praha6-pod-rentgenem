@@ -47,8 +47,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/
           git diff --staged --quiet || git commit -m "Rozpočet a faktury ($(TZ=Europe/Prague date +%F))"
-          git pull --rebase --autostash || true
-          git push || true
+          # Bez „|| true“: když se push neprosadí (mezitím někdo jiný commitnul),
+          # má běh spadnout. Tiše spolknutý push znamená, že se hodinu něco
+          # počítalo a výsledek nikde není — a nikdo se to nedozví.
+          git pull --rebase --autostash
+          git push
 
   publikovat:
     needs: finance
