@@ -48,16 +48,11 @@ a{color:var(--accent)}
 
 main{padding-block:32px 64px}
 
-/* ---- úvodní hlavička s logem ---- */
-.hero{
-  display:flex;align-items:center;gap:clamp(20px,4vw,40px);
-  flex-wrap:wrap;margin-bottom:clamp(24px,4vw,38px);
-}
-.hero-logo{width:clamp(132px,17vw,192px);height:auto;flex:none}
-.hero-text{flex:1 1 20rem;min-width:0}
+/* ---- úvodní hlavička ---- */
+.hero{margin-bottom:clamp(24px,4vw,38px)}
 .hero h1{
   font-size:clamp(1.6rem,4.2vw,2.5rem);line-height:1.12;margin:0 0 .45em;
-  letter-spacing:-.022em;
+  letter-spacing:-.022em;max-width:36ch;
 }
 /* Název projektu jako druhý řádek nadpisu — vizuálně to spojí, co web ukazuje,
    s tím, jak se jmenuje. */
@@ -133,8 +128,6 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 @media (max-width:640px){
   .znacka{font-size:1rem;gap:9px}
   .znacka .znak{height:34px}
-  .hero{gap:16px}
-  .hero-logo{width:110px}
   .provozovatel{gap:14px}
   .paticka-logo{width:86px}
   .hledat{margin-left:0;width:100%}
