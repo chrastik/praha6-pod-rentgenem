@@ -31,43 +31,43 @@ for (const rok of dostupneRoky) {
 }
 
 // ---- faktury ----------------------------------------------------------------
-let obdobi = [];
-try { obdobi = await fetchJson(`${API}/profiles/${id}/payments/months`); }
-catch (err) { console.warn(`  ! seznam období faktur: ${err.message}`); }
-
 /**
- * CityVizor vrací mezi obdobími i prázdný záznam { month: null, year: null }.
- * Když se z něj poskládá datum, vyjde „[object Object]-01-01“ — a API takový
- * nesmysl NEODMÍTNE. Vrátí HTTP 200 a vysype 10 000 plateb, které se pak
- * přičtou k platbám staženým po měsících. Přesně tak vzniklo 9 877 duplicit
- * a výdaje nafouknuté o 1,1 miliardy. Proto se období bez roku přeskakují.
+ * Stahuje se PO ROCÍCH, ne po měsících, a to ze dvou důvodů:
+ *
+ * 1) Seznam období (`payments/months`) obsahuje i prázdný záznam
+ *    { month: null, year: null }. Když se z něj poskládá datum, vyjde
+ *    „[object Object]-01-01“ — a API takový nesmysl NEODMÍTNE. Vrátí HTTP 200
+ *    a vysype 10 000 plateb, které se přičetly k platbám staženým po měsících.
+ *    Takhle vzniklo 9 877 duplicit a výdaje nafouknuté o 1,1 miliardy.
+ *
+ * 2) Seznam období navíc nepokrývá všechny měsíce — za rok 2025 v něm chybí dva,
+ *    a s nimi nám unikalo 30 plateb.
+ *
+ * Roční dotaz obojí obchází. Strop 10 000 plateb na dotaz je bezpečně daleko:
+ * nejsilnější rok má 4 330.
+ *
+ * POZOR: uvnitř jedné odpovědi bývají řádky, které jsou ve všech polích shodné
+ * (dvě platby vodárnám ve stejný den se stejnou částkou a prázdným popisem).
+ * Jsou to dvě skutečné platby, ne chyba — proto se NESMÍ slučovat.
  */
-const platneObdobi = obdobi.filter((o) => {
-  const rok = Number(o?.year ?? o?.rok);
-  return Number.isInteger(rok) && rok >= 2000 && rok <= 2100;
-});
-if (platneObdobi.length !== obdobi.length) {
-  console.log(`  přeskočeno ${obdobi.length - platneObdobi.length} období bez roku`);
-}
-
+const STROP_API = 10000;
 const faktury = [];
-for (const o of platneObdobi) {
-  const rok = Number(o.year ?? o.rok);
-  const mesic = Number(o.month ?? o.mesic) || null;
-  const od = mesic ? `${rok}-${String(mesic).padStart(2, '0')}-01` : `${rok}-01-01`;
-  const doDate = mesic
-    ? new Date(Date.UTC(rok, mesic, 0)).toISOString().slice(0, 10)
-    : `${rok}-12-31`;
+for (const rok of dostupneRoky) {
   try {
     const davka = await fetchJson(
-      `${API}/profiles/${id}/payments?dateFrom=${od}&dateTo=${doDate}&sort=date`,
+      `${API}/profiles/${id}/payments?dateFrom=${rok}-01-01&dateTo=${rok}-12-31&sort=date`,
     );
+    if (davka.length >= STROP_API) {
+      throw new Error(`rok ${rok} vrátil ${davka.length} plateb — naráží na strop API, `
+        + 'stahování je potřeba rozdělit na kratší období');
+    }
     faktury.push(...davka);
+    console.log(`  faktury ${rok}: ${davka.length}`);
   } catch (err) {
-    console.warn(`  ! faktury ${od}: ${err.message}`);
+    console.warn(`  ! faktury ${rok}: ${err.message}`);
   }
 }
-console.log(`  faktury: ${faktury.length}`);
+console.log(`  faktury celkem: ${faktury.length}`);
 
 // CityVizor vrací platby v pořadí období, ne chronologicky, a částku dělí na
 // příjem/výdaj. Normalizujeme to tady, ať s tím frontend nemusí zápasit.
@@ -86,30 +86,28 @@ const fakturyNormalizovane = faktury
   }))
   .sort((a, b) => (b.datum ?? '').localeCompare(a.datum ?? ''));
 
-// Druhá pojistka: kdyby se období někdy začala překrývat jinak, ať se to
-// neprojeví na součtech. Klíčem je celý obsah řádku — dvě opravdu totožné
-// platby ve stejný den se stejným popisem i částkou jsou v praxi tentýž doklad.
+// Shodné řádky se jen spočítají, NEODSTRAŇUJÍ se — zdroj je posílá záměrně
+// (viz poznámka výše). Číslo je tu proto, aby bylo poznat, kdyby jich najednou
+// řádově přibylo, což by znamenalo návrat překryvu období.
 const klic = (f) => JSON.stringify([f.datum, f.dodavatel, f.ico, f.popis, f.vydaj, f.prijem, f.paragraf, f.polozka, f.akce]);
-const bezDuplicit = [...new Map(fakturyNormalizovane.map((f) => [klic(f), f])).values()];
-if (bezDuplicit.length !== fakturyNormalizovane.length) {
-  console.log(`  odstraněno ${fakturyNormalizovane.length - bezDuplicit.length} duplicitních řádků`);
-}
+const shodnych = fakturyNormalizovane.length - new Set(fakturyNormalizovane.map(klic)).size;
+if (shodnych) console.log(`  shodných řádků ze zdroje: ${shodnych} (ponechány)`);
 
-const celkemVydaje = bezDuplicit.reduce((a, f) => a + f.vydaj, 0);
+const celkemVydaje = fakturyNormalizovane.reduce((a, f) => a + f.vydaj, 0);
 console.log(`  výdaje celkem: ${Math.round(celkemVydaje).toLocaleString('cs-CZ')} Kč`);
 
 await writeDataset('rozpocet', Object.entries(rozpocet).map(([rok, polozky]) => ({
   rok: Number(rok), polozky,
 })), { profil: { id, ico: profil.ico ?? null, slug: SLUG }, roky: dostupneRoky });
 
-await writeDataset('faktury', bezDuplicit, {
+await writeDataset('faktury', fakturyNormalizovane, {
   profil: { id, slug: SLUG },
-  obdobi: obdobi.length,
+  shodnychRadku: shodnych,
   souhrn: {
     celkemVydaje,
     rozsah: {
-      od: bezDuplicit.at(-1)?.datum ?? null,
-      do: bezDuplicit[0]?.datum ?? null,
+      od: fakturyNormalizovane.at(-1)?.datum ?? null,
+      do: fakturyNormalizovane[0]?.datum ?? null,
     },
   },
 });
