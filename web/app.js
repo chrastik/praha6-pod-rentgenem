@@ -388,7 +388,8 @@ async function smlouvy(params) {
   if (rok) vybrane = vybrane.filter((s) => (s.zverejneno ?? s.datum ?? '').startsWith(rok));
   if (nq) vybrane = vybrane.filter((s) => norm(`${s.predmet ?? ''} ${s.protistrana ?? ''}`).includes(nq));
 
-  const soucet = vybrane.reduce((a, s) => a + (s.castkaBezDph ?? 0), 0);
+  // Součet jen z korunových smluv — pár jich je v dolarech a eurech.
+  const soucet = vybrane.reduce((a, s) => a + ((s.mena ?? 'CZK') === 'CZK' ? (s.castkaBezDph ?? 0) : 0), 0);
   const { s, stran, kus } = vyrez(vybrane, params);
 
   app.innerHTML = `
@@ -396,6 +397,12 @@ async function smlouvy(params) {
     <p class="podnadpis">Smlouvy městské části Praha 6, IČO ${esc(ds.ico ?? '00063703')}.
     Uvedená hodnota je cena bez DPH tak, jak ji strany do registru zapsaly — neříká,
     kterým směrem peníze tečou, a u části smluv chybí.</p>
+
+    <p class="poznamka"><strong>Známá hodnota není „kolik radnice utratila“.</strong>
+    Je to součet cen uvedených ve smlouvách, tedy včetně dodatků, které často jen mění
+    smlouvu původní, a včetně smluv, kde je Praha 6 jen jednou ze stran a zveřejnil je
+    někdo jiný (banka, hlavní město, developer). U části smluv částka chybí úplně.
+    Kolik se opravdu zaplatilo, ukazují <a href="#/finance">faktury</a>.</p>
     <div class="karty">
       <div><div class="v">${fmtCislo(ds.pocet)}</div><div class="k">smluv celkem</div></div>
       <div><div class="v">${fmtKc(ds.souhrn?.celkovaHodnota)}</div><div class="k">známá hodnota</div></div>
@@ -577,7 +584,7 @@ async function organizaceDetail(params, ds, cesta) {
   if (rok) vybrane = vybrane.filter((x) => (x.publikovano ?? '').startsWith(rok));
   if (nq) vybrane = vybrane.filter((x) => norm(`${x.predmet ?? ''} ${x.protistrana ?? ''}`).includes(nq));
 
-  const soucet = vybrane.reduce((a, x) => a + (x.mena === 'CZK' ? (x.castka ?? 0) : 0), 0);
+  const soucet = vybrane.reduce((a, x) => a + ((x.mena ?? 'CZK') === 'CZK' ? (x.castka ?? 0) : 0), 0);
   const { s, stran, kus } = vyrez(vybrane, params);
   const vsechny = ds.items.filter((x) => x.subjektIco === ico);
 
@@ -689,7 +696,7 @@ function dotaceSeznam(params, ds, cesta, prijate) {
       norm(`${d.prijemce ?? ''} ${d.projekt ?? ''} ${d.predmet ?? ''}`).includes(nq));
   }
 
-  const soucet = vybrane.reduce((a, d) => a + (d.castka ?? 0), 0);
+  const soucet = vybrane.reduce((a, d) => a + ((d.mena ?? 'CZK') === 'CZK' ? (d.castka ?? 0) : 0), 0);
   const { s: strana, stran, kus } = vyrez(vybrane, params);
   const roky = [...new Set(ds.items.filter((d) => (d.smer === 'prijata') === prijate)
     .map((d) => d.rok).filter(Boolean))].sort((a, b) => b - a);
