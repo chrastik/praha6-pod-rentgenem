@@ -14,8 +14,8 @@
  */
 import { fetchText, mapLimit } from './lib/http.mjs';
 import { writeDataset, readItems } from './lib/util.mjs';
-import { parseStranku, urlVysledku } from './lib/vysledky.mjs';
-import { SUBJEKTY, TYPY, podleIco, zkontrolujSeznam } from './lib/organizace.mjs';
+import { parseStranku, urlVysledku, LIMIT_STRANKY } from './lib/vysledky.mjs';
+import { SUBJEKTY, TYPY, zkontrolujSeznam } from './lib/organizace.mjs';
 
 const POJISTKA_STRANEK = 250; // ~25 000 smluv na subjekt; nikdo se k tomu nepřiblíží
 const PARALEL = Number(process.env.PARALEL ?? 3);
@@ -34,42 +34,73 @@ for (const s of await readItems('smlouvy-organizace')) {
   drivejsi.get(s.subjektIco).push(s);
 }
 
+/**
+ * Vlastní session pro jeden subjekt.
+ *
+ * Server si drží stav datagridu (filtr, offset, velikost stránky) v session.
+ * Kdyby všechny subjekty sdílely jednu cookie, paralelní běhy by si navzájem
+ * přepisovaly offset a data by se tiše zamíchala. Proto jedna session = jeden
+ * subjekt.
+ */
+function novaSession() {
+  const jar = new Map();
+  return async function stahni(url) {
+    const hlavicky = jar.size
+      ? { cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; ') }
+      : {};
+    const { text, hlavicky: odpoved } = await fetchText(url, { headers: hlavicky, vratHlavicky: true });
+    for (const c of odpoved.getSetCookie?.() ?? []) {
+      const [dvojice] = c.split(';');
+      const i = dvojice.indexOf('=');
+      if (i > 0) jar.set(dvojice.slice(0, i).trim(), dvojice.slice(i + 1).trim());
+    }
+    return text;
+  };
+}
+
 /** Projde stránkované výsledky pro jedno IČO a vrátí smlouvy v poslední verzi. */
 async function stahniSubjekt(subjekt) {
+  const stahni = novaSession();
   const nalezene = new Map();
   const videnaId = new Set(); // včetně starších verzí — slouží k detekci zacyklení
-  let offset = 0;
   let celkem = null;
 
-  for (let stranka = 0; stranka < POJISTKA_STRANEK; stranka++) {
-    const html = await fetchText(urlVysledku(subjekt.ico, offset));
+  const zpracuj = (html) => {
     const { celkem: c, radky } = parseStranku(html);
     if (c != null) celkem = c;
-    if (radky.length === 0) break;
-
     let novychId = 0;
     for (const r of radky) {
       if (videnaId.has(r.id)) continue;
       videnaId.add(r.id);
       novychId++;
       if (!r.posledniVerze) continue; // starší verze téže smlouvy nechceme
-      nalezene.set(r.id, {
-        ...r,
-        subjektIco: subjekt.ico,
-        subjekt: subjekt.nazev,
-        typ: subjekt.typ,
-      });
+      nalezene.set(r.id, { ...r, subjektIco: subjekt.ico, subjekt: subjekt.nazev, typ: subjekt.typ });
     }
+    return { radku: radky.length, novychId };
+  };
 
-    // Krok se odvozuje od skutečného počtu řádků, ne od požadovaného limitu:
-    // server si drží velikost stránky v session a náš parametr může ignorovat.
-    offset += radky.length;
+  // 1) První dotaz bez signálu — jen tak server odpoví a založí session.
+  zpracuj(await stahni(urlVysledku(subjekt.ico)));
+
+  // 2) S cookie už signál projde: zvětšit stránku, ať nestahujeme po deseti.
+  //    Kdyby to server ignoroval, krok níž se prostě odvodí od skutečného počtu řádků.
+  let { radku } = zpracuj(await stahni(
+    urlVysledku(subjekt.ico, { limit: LIMIT_STRANKY, signal: 'searchResultList-setLimit' })));
+
+  // 3) Stránkování. Krok = kolik řádků server opravdu vrátil.
+  let offset = radku;
+  for (let stranka = 0; stranka < POJISTKA_STRANEK; stranka++) {
+    if (radku === 0) break;
     if (celkem != null && offset >= celkem) break;
 
-    // Když stránka nepřinesla jediné nové ID, server nám vrátil tutéž stránku
-    // znovu — typicky proto, že přestal respektovat offset. Pokračovat by
-    // znamenalo točit se donekonečna.
-    if (novychId === 0) break;
+    const vysledek = zpracuj(await stahni(
+      urlVysledku(subjekt.ico, { offset, signal: 'searchResultList-setOffset' })));
+    radku = vysledek.radku;
+    offset += radku;
+
+    // Žádné nové ID znamená, že server vrátil tutéž stránku znovu.
+    // Pokračovat by bylo točení dokola.
+    if (vysledek.novychId === 0) break;
   }
 
   return { smlouvy: [...nalezene.values()], celkem };
@@ -86,7 +117,10 @@ await mapLimit(kestazeni, PARALEL, async (subjekt) => {
   try {
     const { smlouvy, celkem } = await stahniSubjekt(subjekt);
     vysledky.set(subjekt.ico, smlouvy);
-    const chybi = celkem != null && smlouvy.length < celkem * 0.5 && celkem > 10;
+    // Registr počítá i starší verze, takže naše číslo bývá o něco nižší.
+    // Propad pod polovinu ale znamená, že se stránkování rozbilo.
+    const chybi = celkem != null && celkem > 10 && smlouvy.length < celkem * 0.5;
+    if (chybi) selhalo.push(`${subjekt.nazev}: registr hlásí ${celkem}, stáhlo se jen ${smlouvy.length}`);
     console.log(`  ${subjekt.nazev.padEnd(34)} ${String(smlouvy.length).padStart(5)} smluv`
       + (celkem != null ? ` (registr hlásí ${celkem} vč. starších verzí)` : '')
       + (chybi ? '  ← POZOR, sedí to?' : ''));
@@ -119,6 +153,14 @@ const souhrny = SUBJEKTY.map((s) => {
     stazeno: vysledky.has(s.ico),
   };
 }).sort((a, b) => b.pocet - a.pocet);
+
+// Nulový výsledek u všech subjektů není „nic nepublikují“, ale rozbitý scraper.
+// Přesně tohle jednou proteklo jako úspěšný běh: server bez session cookie
+// vrátí stránku bez tabulky a všechno vyjde na nulu.
+if (vysledky.size > 0 && [...vysledky.values()].every((v) => v.length === 0)) {
+  throw new Error('Ani jeden z ' + vysledky.size + ' subjektů nevrátil jedinou smlouvu. '
+    + 'To není stav registru, to je rozbité čtení výsledků — data nepřepisuji.');
+}
 
 const prazdne = souhrny.filter((s) => s.pocet === 0).map((s) => `${s.nazev} (${s.ico})`);
 if (prazdne.length) {
