@@ -10,6 +10,7 @@
     "sync:zapisy": "node scripts/sync-zapisy.mjs",
     "sync:finance": "node scripts/sync-finance.mjs",
     "sync:smlouvy": "node scripts/sync-smlouvy.mjs",
+    "sync:organizace": "node scripts/sync-smlouvy-organizace.mjs",
     "sync:deska": "node scripts/sync-deska.mjs",
     "sync:scitani": "node scripts/sync-scitani.mjs",
     "merge": "node scripts/merge-usneseni.mjs",
