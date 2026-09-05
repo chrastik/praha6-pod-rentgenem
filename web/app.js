@@ -132,6 +132,7 @@ const routes = {
   '/finance': finance,
   '/smlouvy': smlouvy,
   '/deska': deska,
+  '/scitani': scitani,
   '/zdroje': zdroje,
 };
 
@@ -174,6 +175,7 @@ async function domu() {
       ${odkaz('#/finance', 'Peníze', 'Položkový rozpočet a jednotlivé faktury z CityVizoru.')}
       ${odkaz('#/smlouvy', 'Registr smluv', 'Smlouvy městské části podle IČO 00063703.')}
       ${odkaz('#/deska', 'Úřední deska', 'Aktuálně vyvěšené dokumenty a průběžně budovaný archiv.')}
+      ${odkaz('#/scitani', 'Sčítání 2021', 'Kolik nás je, jak bydlíme, co jsme vystudovali a čím jezdíme do práce.')}
     </div>`;
 }
 
@@ -482,6 +484,103 @@ const radekDeska = (d) => `
       </div>
     </div>
   </div>`;
+
+// ----------------------------------------------------------------- sčítání ---
+/**
+ * Pruhový řádek. Délka nese velikost, číslo i podíl jsou vypsané textem — barva
+ * tedy nikdy nenese informaci sama o sobě. „Nezjištěno“ má šrafu, aby na první
+ * pohled nevypadalo jako naměřená kategorie.
+ */
+function pruh(popis, hodnota, zaklad, { neurcite = false } = {}) {
+  const podil = zaklad ? hodnota / zaklad : 0;
+  const procenta = podil === 0 ? '0 %'
+    : podil < 0.005 ? '< 1 %'
+    : `${Math.round(podil * 100)} %`;
+  const nazev = `${popis}: ${fmtCislo(hodnota)} z ${fmtCislo(zaklad)}`;
+  return `
+    <div class="graf-radek" title="${esc(nazev)}">
+      <div class="graf-popis">${esc(popis)}</div>
+      <div class="graf-drah"><span class="graf-pruh${neurcite ? ' neurcite' : ''}"
+           style="width:${(podil * 100).toFixed(2)}%"></span></div>
+      <div class="graf-hodnota"><strong>${fmtCislo(hodnota)}</strong><span>${procenta}</span></div>
+    </div>`;
+}
+
+const neurcitaKategorie = (popis) => /nezjištěno/i.test(popis ?? '');
+
+const pruhy = (polozky, zaklad) =>
+  `<div class="grafy">${polozky.map((p) =>
+    pruh(p.popis, p.hodnota, zaklad, { neurcite: neurcitaKategorie(p.popis) })).join('')}</div>`;
+
+async function scitani() {
+  const ds = await nacti('scitani.json').catch(() => null);
+  const d = ds?.items?.[0];
+  if (!d) {
+    app.innerHTML = `<h1>Sčítání 2021</h1><p class="prazdno">Data ze sčítání ještě nebyla načtena.</p>`;
+    return;
+  }
+
+  const o = d.obyvatel;
+  app.innerHTML = `
+    <p class="nadsekce">ČSÚ · Sčítání 2021</p>
+    <h1>Praha 6 podle Sčítání 2021</h1>
+    <p class="podnadsekce">Vybrané údaje o obyvatelích, bydlení, vzdělání, ekonomické
+    aktivitě, domácnostech a dojíždění. Vše jen za městskou část, ne za správní obvod.</p>
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(o)}</div><div class="k">obyvatel s obvyklým pobytem</div></div>
+      <div><div class="v">${fmtCislo(d.domacnosti.celkem)}</div><div class="k">domácností · ${fmtCislo(d.domacnosti.jednotlivce)} jednočlenných</div></div>
+      <div><div class="v">${fmtCislo(d.domy.celkem)}</div><div class="k">domů · ${fmtCislo(d.domy.obydlene)} obydlených</div></div>
+      <div><div class="v">${fmtCislo(d.byty.celkem)}</div><div class="k">bytů · ${fmtCislo(d.byty.obydlene)} obydlených</div></div>
+    </div>
+    <p class="metodika">Počet obyvatel vychází z <strong>obvyklého pobytu</strong>, nikoli
+    z trvalého bydliště — proto se liší od čísel, která uvádí radnice. Rozhodný okamžik
+    ${fmtDatum(d.rozhodnyOkamzik)}. Zdroj: ${esc(d.zdroj)}.</p>
+
+    <h2>Věk a pohlaví</h2>
+    <p class="pod">V Praze 6 žilo ${fmtCislo(d.pohlavi.muzi)} mužů a ${fmtCislo(d.pohlavi.zeny)} žen.
+    Podíly jsou počítané ze všech ${fmtCislo(o)} obyvatel.</p>
+    <h3 class="podnadpis-graf">Základní věkové skupiny</h3>
+    ${pruhy(d.vek.zakladni, o)}
+    <h3 class="podnadpis-graf">Pětileté věkové skupiny</h3>
+    ${pruhy(d.vek.petilete, o)}
+
+    <h2>Domy a byty</h2>
+    <p class="pod">Struktura domovního a bytového fondu.</p>
+    <h3 class="podnadpis-graf">Obydlené domy podle druhu</h3>
+    ${pruhy(d.domy.druhyObydlenych, d.domy.obydlene)}
+    <h3 class="podnadpis-graf">Byty</h3>
+    ${pruhy([
+      { popis: 'Obvykle obydlené', hodnota: d.byty.obydlene },
+      { popis: 'Obvykle neobydlené', hodnota: d.byty.neobydlene },
+    ], d.byty.celkem)}
+
+    <h2>Nejvyšší dosažené vzdělání</h2>
+    <p class="pod">Obyvatelé ve věku 15 a více let, celkem ${fmtCislo(d.vzdelani.celkem)}.
+    U části obyvatel nebylo vzdělání zjištěno.</p>
+    ${pruhy(d.vzdelani.kategorie, d.vzdelani.celkem)}
+
+    <h2>Práce a studium</h2>
+    <p class="pod">${fmtCislo(d.aktivita.pracovniSila)} lidí tvořilo pracovní sílu,
+    ${fmtCislo(d.aktivita.mimoPracovniSilu)} bylo mimo ni. Podíly ze všech obyvatel.</p>
+    ${pruhy(d.aktivita.kategorie, o)}
+
+    <h2>Jak velké jsou domácnosti?</h2>
+    <p class="pod">Celkem ${fmtCislo(d.domacnosti.celkem)} hospodařících domácností;
+    ${fmtCislo(d.domacnosti.rodinne)} z nich rodinných a ${fmtCislo(d.domacnosti.nerodinne)} nerodinných.</p>
+    ${pruhy(d.domacnosti.podleClenu.map((k) => ({
+      ...k, popis: k.popis === '1' ? '1 člen' : /^[2-4]$/.test(k.popis) ? `${k.popis} členové` : `${k.popis} členů`,
+    })), d.domacnosti.celkem)}
+
+    <h2>Čím lidé jezdí do práce a do školy?</h2>
+    <p class="pod">Hlavní dopravní prostředek u ${fmtCislo(d.dojizdeni.celkem)} vyjíždějících
+    zaměstnaných, žáků a studentů.</p>
+    ${pruhy(d.dojizdeni.kategorie, d.dojizdeni.celkem)}
+
+    <p class="metodika">Všechna čísla pocházejí z otevřených dat ČSÚ za území
+    <code>${esc(d.uzemi.cis)}/${esc(d.uzemi.kod)}</code> — městská část Praha 6.
+    <a href="${esc(d.zdrojUrl)}" target="_blank" rel="noopener">Zdrojové datové sady</a>.</p>`;
+}
 
 // ------------------------------------------------------------------ zdroje ---
 async function zdroje() {

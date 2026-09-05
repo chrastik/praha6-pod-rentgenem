@@ -67,6 +67,57 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 .podnadpis{color:var(--muted);margin:0 0 1.6em;max-width:62ch}
 .pod{color:var(--muted);font-size:.9rem;margin:-.3em 0 1em}
 
+/* ---- sekce Sčítání ---- */
+.nadsekce{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--znacka);margin:0 0 .4em;
+}
+.podnadsekce{color:var(--muted);margin:0 0 1.6em;max-width:62ch}
+.podnadpis-graf{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:.78rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--faint);margin:1.6em 0 .7em;
+}
+.metodika{
+  font-size:.85rem;color:var(--muted);border-left:3px solid var(--rule-strong);
+  padding-left:14px;margin:1.4em 0 0;max-width:70ch;
+}
+
+/* Pruhy: délka nese velikost, číslo i podíl jsou vypsané textem.
+   Barva tedy nikdy nenese informaci sama o sobě. */
+.grafy{display:flex;flex-direction:column;gap:9px;margin-bottom:1.4em}
+.graf-radek{
+  display:grid;grid-template-columns:minmax(9rem,15rem) 1fr auto;
+  align-items:center;gap:0 14px;
+}
+.graf-popis{font-size:.92rem;color:var(--ink)}
+.graf-drah{height:10px;background:var(--surface-2);border-radius:2px;overflow:hidden}
+.graf-pruh{
+  display:block;height:100%;min-width:2px;
+  background:var(--accent);
+  border-radius:0 4px 4px 0;   /* zaoblený jen konec dat, začátek drží na základně */
+}
+/* „Nezjištěno“ není naměřená kategorie — šrafa to odliší i bez barvy. */
+.graf-pruh.neurcite{
+  background:repeating-linear-gradient(135deg,
+    var(--faint) 0 3px, transparent 3px 6px), var(--surface-2);
+}
+.graf-hodnota{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:.85rem;font-variant-numeric:tabular-nums;white-space:nowrap;
+  display:flex;gap:8px;align-items:baseline;justify-content:flex-end;min-width:8.5rem;
+}
+.graf-hodnota strong{font-weight:600}
+.graf-hodnota span{color:var(--faint);min-width:2.6rem;text-align:right}
+
+@media (max-width:640px){
+  .graf-radek{grid-template-columns:1fr auto;gap:3px 10px}
+  .graf-popis{grid-column:1}
+  .graf-hodnota{grid-column:2;min-width:0}
+  .graf-drah{grid-column:1 / -1}
+}
+
 .filtry{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
 .filtry select,.filtry button,.filtry input{
   font-size:.87rem;padding:6px 10px;border:1px solid var(--rule);border-radius:3px;
