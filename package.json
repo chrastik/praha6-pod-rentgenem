@@ -11,6 +11,7 @@
     "sync:finance": "node scripts/sync-finance.mjs",
     "sync:smlouvy": "node scripts/sync-smlouvy.mjs",
     "sync:deska": "node scripts/sync-deska.mjs",
+    "sync:scitani": "node scripts/sync-scitani.mjs",
     "merge": "node scripts/merge-usneseni.mjs",
     "index": "node scripts/build-index.mjs",
     "validate": "node scripts/validate.mjs",
