@@ -37,6 +37,26 @@ zkus('normální text zůstane beze změny', vycisti('  Dotace  na   projekt '),
 zkus('dotace se pozná', jeDotace('Smlouva o poskytnutí dotace'), true);
 zkus('smlouva o dílo se nepozná jako dotace', jeDotace('Smlouva o dílo — oprava střechy'), false);
 
+console.log('\nRozpoznání dotace bez slova „dotace“ (regrese: chybělo 611 smluv)');
+// Ohlásil to uživatel: United Islands od Ostrovy s.r.o. v přehledu chyběl,
+// protože předmět nese jen název programu, příjemce a projekt.
+zkus('Šestka kulturní bez slova dotace',
+  jeDotace('Šestka kulturní  I. - 2026  - Ostrovy s.r.o - United Island Klubová noc'), true);
+zkus('Šestka komunitní', jeDotace('Šestka komunitní - 2026 - Auto*Mat, z.s. - Zažít město jinak 2026'), true);
+zkus('Podpora pravidelné činnosti', jeDotace('Podpora pravidelné činnosti - HC Hvězda Praha, z.s.'), true);
+zkus('Jednorázové aktivity', jeDotace('Jednorázové aktivity I. - Status Fresh - Podpora provozu'), true);
+zkus('Senior a handicap', jeDotace('Senior a handicap sport na Šestce - TJ Sokol'), true);
+zkus('Aktivní šestka', jeDotace('Aktivní šestka - SK Aritma - celoroční činnost'), true);
+
+console.log('\nSlovo „dotace“ ještě nedělá dotaci');
+zkus('nákup poradenství k dotaci není dotace',
+  jeDotace('Zajištění komplexních poradenských služeb pro dotaci'), false);
+zkus('zpracování žádosti o dotaci není dotace',
+  jeDotace('zpracování žádosti o získání dotace na projekt z programu Citizens'), false);
+zkus('objednávka na program není dotace', jeDotace('Objednávka - Zdravá Šestka'), false);
+zkus('nájemní smlouva zmiňující dotaci není dotace',
+  jeDotace('Nájemní smlouva - dotace na provoz'), false);
+
 console.log('\nOblast');
 zkus('hospic jde do sociální, ne do seniorů zvlášť',
   urciOblast('Podpora hospicové péče').kod, 'socialni');
