@@ -212,6 +212,7 @@ export function sestav(smlouvy) {
       prijemce,
       prijemceIco: ico,
       castka: s.castkaBezDph ?? null,
+      mena: s.mena ?? 'CZK',
       url: s.url,
     });
   }
@@ -252,7 +253,7 @@ export function sestav(smlouvy) {
     }
     const p = mapa.get(k);
     p.pocet++;
-    if (d.castka != null) { p.castka += d.castka; p.sCastkou++; }
+    if (d.castka != null && (d.mena ?? 'CZK') === 'CZK') { p.castka += d.castka; p.sCastkou++; }
     p.oblasti.add(d.oblast);
     const den = d.zverejneno ?? d.datum;
     if (den) {
@@ -266,7 +267,9 @@ export function sestav(smlouvy) {
 
   const rozdane = items.filter((d) => d.smer === 'rozdana');
   const prijate = items.filter((d) => d.smer === 'prijata');
-  const soucet = (xs) => xs.reduce((a, d) => a + (d.castka ?? 0), 0);
+  // Jen koruny — dolarová smlouva přičtená k Kč je nesmysl.
+  const jeKc = (d) => d.castka != null && (d.mena ?? 'CZK') === 'CZK';
+  const soucet = (xs) => xs.filter(jeKc).reduce((a, d) => a + d.castka, 0);
 
   const podleOblasti = {};
   for (const [kod, nazev] of OBLASTI.map(([k, n]) => [k, n]).concat([['ostatni', 'Nezařazeno']])) {
@@ -279,8 +282,9 @@ export function sestav(smlouvy) {
     prijemci,
     oblasti: podleOblasti,
     souhrn: {
-      rozdano: { pocet: rozdane.length, castka: soucet(rozdane), sCastkou: rozdane.filter((d) => d.castka != null).length },
-      prijato: { pocet: prijate.length, castka: soucet(prijate), sCastkou: prijate.filter((d) => d.castka != null).length },
+      rozdano: { pocet: rozdane.length, castka: soucet(rozdane), sCastkou: rozdane.filter(jeKc).length },
+      prijato: { pocet: prijate.length, castka: soucet(prijate), sCastkou: prijate.filter(jeKc).length },
+      vCiziMene: items.filter((d) => d.castka != null && (d.mena ?? 'CZK') !== 'CZK').length,
       prijemcu: prijemci.length,
       roky: [...new Set(rozdane.map((d) => d.rok).filter(Boolean))].sort((a, b) => b - a),
       sProgramem: rozdane.filter((d) => d.program).length,
