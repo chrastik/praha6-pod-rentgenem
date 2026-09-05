@@ -148,13 +148,20 @@ async function backfill() {
 
   // Celý registr od roku 2016 se do jednoho běhu Actions nemusí vejít. ROK_OD/ROK_DO
   // umožní projet historii po dávkách, každou v samostatném běhu, který se commitne.
-  const rokOd = Number(process.env.ROK_OD ?? 0);
-  const rokDo = Number(process.env.ROK_DO ?? 9999);
+  // POZOR: nenastavený vstup workflow přijde jako prázdný řetězec, ne jako
+  // undefined. Number('') je 0, takže `?? 9999` se nikdy neuplatní a filtr
+  // pak nepustí jediný dump — běh doběhne za dvě vteřiny a tváří se úspěšně.
+  const rokOd = Number(process.env.ROK_OD) || 0;
+  const rokDo = Number(process.env.ROK_DO) || 9999;
   if (rokOd || rokDo !== 9999) {
     soubory = soubory.filter((f) => {
       const r = Number(/dump_(\d{4})_/.exec(f)[1]);
       return r >= rokOd && r <= rokDo;
     });
+  }
+  if (soubory.length === 0) {
+    throw new Error('Ke zpracování nezbyl ani jeden dump. Zkontroluj ROK_OD/ROK_DO — '
+      + 'tichý průchod bez dat je horší než spadlý běh.');
   }
   console.log(`  ${soubory.length} měsíčních dumpů ke zpracování`
     + (rokOd || rokDo !== 9999 ? ` (roky ${rokOd || '…'}–${rokDo === 9999 ? '…' : rokDo})` : ''));
