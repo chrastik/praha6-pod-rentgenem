@@ -81,7 +81,7 @@ const manifest = {
   },
   datasety: {},
 };
-for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska']) {
+for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska', 'scitani']) {
   const ds = await readDataset(name);
   if (ds) manifest.datasety[name] = { pocet: ds.pocet, aktualizovano: ds.aktualizovano };
 }
