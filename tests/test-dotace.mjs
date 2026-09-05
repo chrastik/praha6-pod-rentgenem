@@ -100,6 +100,16 @@ zkus('Letiště není mezi příjemci dotací',
 zkus('městská část není mezi příjemci vlastních dotací',
   v.prijemci.some((p) => p.ico === '00063703'), false);
 
+console.log('\nCizí měna se nesčítá s korunami');
+const meny = sestav([
+  smlouva({ protistrana: 'Spolek M', protistranaIco: '66666666', castkaBezDph: 100000, mena: 'CZK' }),
+  smlouva({ protistrana: 'Spolek M', protistranaIco: '66666666', castkaBezDph: 5000, mena: 'EUR' }),
+]);
+const m = meny.prijemci.find((p) => p.ico === '66666666');
+zkus('do součtu jdou jen koruny', m.castka, 100000);
+zkus('ale dotace se počítá i tak', m.pocet, 2);
+zkus('a eviduje se, kolik jich je v cizí měně', meny.souhrn.vCiziMene, 1);
+
 console.log('\nSoučty u příjemců');
 const opakovany = sestav([
   smlouva({ protistrana: 'Spolek A', protistranaIco: '33333333', castkaBezDph: 10000, zverejneno: '2020-01-01' }),
