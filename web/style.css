@@ -44,17 +44,21 @@ main{padding-block:32px 64px}
 h1{font-size:1.9rem;letter-spacing:-.02em;margin:0 0 .3em;text-wrap:balance}
 h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 .podnadpis{color:var(--muted);margin:0 0 1.6em;max-width:62ch}
+.pod{color:var(--muted);font-size:.9rem;margin:-.3em 0 1em}
 
 .filtry{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
-.filtry select,.filtry button{
+.filtry select,.filtry button,.filtry input{
   font-size:.87rem;padding:6px 10px;border:1px solid var(--rule);border-radius:3px;
-  background:var(--surface);color:var(--ink);
+  background:var(--surface);color:var(--ink);font-family:inherit;
 }
+.filtry input[type="search"]{min-width:min(260px,100%);flex:1 1 200px}
+.filtry button{cursor:pointer}
+.filtry button:hover{border-color:var(--accent);color:var(--accent)}
 .filtry .pocet{margin-left:auto;color:var(--muted);font-size:.87rem;font-variant-numeric:tabular-nums}
 
 .seznam{border-top:1px solid var(--rule)}
 .polozka{border-bottom:1px solid var(--rule);padding:14px 0;display:grid;grid-template-columns:auto 1fr;gap:0 16px}
-.polozka .meta{font-size:.8rem;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:.2em}
+.polozka .meta{font-size:.8rem;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:.2em;min-width:6.2em}
 .polozka h3{font-size:1rem;font-weight:600;margin:0 0 .3em;line-height:1.4}
 .polozka h3 a{color:var(--ink);text-decoration:none}
 .polozka h3 a:hover{text-decoration:underline}
@@ -64,9 +68,26 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 .badge.RMC{background:var(--accent-soft);color:var(--rmc)}
 .stitek{font-size:.75rem;color:var(--muted);background:var(--surface-2);padding:.15em .5em;border-radius:2px}
 
-.strankovani{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:24px;font-size:.87rem}
-.strankovani button{padding:6px 12px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:3px}
-.strankovani button[disabled]{opacity:.4}
+/* ---- stránkování ---- */
+/* U faktur je přes 500 stran — proto skok na první/poslední a přímé zadání čísla. */
+.strankovani{
+  display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;
+  margin-top:26px;padding-top:20px;border-top:1px solid var(--rule);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:.87rem;
+}
+.strankovani button{
+  padding:7px 13px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);
+  border-radius:3px;cursor:pointer;font:inherit;
+}
+.strankovani button:hover:not([disabled]){border-color:var(--accent);color:var(--accent)}
+.strankovani button[disabled]{opacity:.35;cursor:default}
+.strankovani .stav{display:inline-flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap}
+.strankovani .skok{
+  width:5.5em;padding:6px 8px;text-align:center;font:inherit;
+  font-variant-numeric:tabular-nums;
+  border:1px solid var(--rule);border-radius:3px;background:var(--ground);color:var(--ink);
+}
+.strankovani .rozsah{flex-basis:100%;text-align:center;color:var(--faint);font-size:.8rem;font-variant-numeric:tabular-nums}
 
 .karty{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin:20px 0}
 .karty>div{background:var(--surface);padding:14px 16px}

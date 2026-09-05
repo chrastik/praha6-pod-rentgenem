@@ -39,7 +39,93 @@ const norm = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 
 let manifest = null;
 
-// ---------------------------------------------------------------- router ----
+// ================================================================= seznamy ===
+// Všechny čtyři přehledy — usnesení, faktury, smlouvy i úřední deska — sdílejí
+// stejné stránkování a stejné chování filtrů. Dřív ho měla jen usnesení a zbytek
+// se tiše ořezával na prvních sto položek, takže starší záznamy nešly zobrazit.
+
+const NA_STRANU = 50;
+
+/** Vybere z pole položky patřící na aktuální stranu a spočítá rozsah. */
+function vyrez(polozky, params, naStranu = NA_STRANU) {
+  const stran = Math.max(1, Math.ceil(polozky.length / naStranu));
+  const s = Math.min(Math.max(1, Number(params.get('strana') ?? 1) || 1), stran);
+  return { s, stran, kus: polozky.slice((s - 1) * naStranu, s * naStranu) };
+}
+
+/**
+ * U faktur je přes 500 stran, u smluv skoro 300 — samotné „další / předchozí“
+ * by na starší záznamy nestačilo, proto skok na první, poslední a přímé zadání.
+ */
+function strankovani(s, stran, celkem, naStranu = NA_STRANU) {
+  if (stran <= 1) return '';
+  const od = (s - 1) * naStranu + 1;
+  const doo = Math.min(s * naStranu, celkem);
+  return `
+    <nav class="strankovani" aria-label="Stránkování">
+      <button type="button" data-strana="1" ${s <= 1 ? 'disabled' : ''} title="První strana">«</button>
+      <button type="button" data-strana="${s - 1}" ${s <= 1 ? 'disabled' : ''}>← Předchozí</button>
+      <span class="stav">
+        Strana
+        <input class="skok" type="number" min="1" max="${stran}" value="${s}"
+               aria-label="Číslo strany" inputmode="numeric">
+        z ${fmtCislo(stran)}
+      </span>
+      <button type="button" data-strana="${s + 1}" ${s >= stran ? 'disabled' : ''}>Další →</button>
+      <button type="button" data-strana="${stran}" ${s >= stran ? 'disabled' : ''} title="Poslední strana">»</button>
+      <span class="rozsah">záznamy ${fmtCislo(od)}–${fmtCislo(doo)} z ${fmtCislo(celkem)}</span>
+    </nav>`;
+}
+
+/** Vykreslí seznam nebo hlášku, že nic neodpovídá. */
+function seznam(kus, radek, prazdno = 'Nic neodpovídá zadání.') {
+  return kus.length
+    ? `<div class="seznam">${kus.map(radek).join('')}</div>`
+    : `<p class="prazdno">${esc(prazdno)}</p>`;
+}
+
+/**
+ * Napojí filtry a stránkování na URL. Změna filtru vrací na první stranu —
+ * jinak by uživatel po zúžení výběru skončil na prázdné straně 300.
+ */
+function zapoj(cesta, params, zachovat = []) {
+  const naFiltr = (form) => {
+    const p = new URLSearchParams();
+    for (const k of zachovat) if (params.get(k)) p.set(k, params.get(k));
+    for (const [k, v] of new FormData(form)) if (String(v).trim()) p.set(k, String(v).trim());
+    p.delete('strana');
+    location.hash = `#${cesta}?${p}`;
+  };
+
+  const form = document.getElementById('filtry');
+  form?.addEventListener('change', (e) => naFiltr(e.currentTarget));
+  form?.addEventListener('submit', (e) => { e.preventDefault(); naFiltr(e.currentTarget); });
+
+  const naStranu = (n) => {
+    const p = new URLSearchParams(params);
+    p.set('strana', String(n));
+    location.hash = `#${cesta}?${p}`;
+  };
+  app.querySelectorAll('[data-strana]').forEach((b) =>
+    b.addEventListener('click', () => naStranu(b.dataset.strana)));
+  app.querySelectorAll('.skok').forEach((i) => {
+    const jdi = () => {
+      const n = Number(i.value);
+      if (Number.isFinite(n) && n >= 1) naStranu(Math.min(n, Number(i.max)));
+    };
+    i.addEventListener('change', jdi);
+    i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); jdi(); } });
+  });
+}
+
+/** Roky nalezené v datech, sestupně — pro nabídku filtru. */
+const rokyZ = (polozky, klic = 'datum') =>
+  [...new Set(polozky.map((p) => (p[klic] ?? '').slice(0, 4)).filter(Boolean))].sort().reverse();
+
+const volby = (hodnoty, vybrano) =>
+  hodnoty.map((h) => `<option${String(h) === String(vybrano) ? ' selected' : ''}>${esc(h)}</option>`).join('');
+
+// ================================================================== router ===
 const routes = {
   '/': domu,
   '/usneseni': usneseni,
@@ -65,7 +151,7 @@ async function route() {
   window.scrollTo(0, 0);
 }
 
-// ------------------------------------------------------------------ views ---
+// =================================================================== views ===
 async function domu() {
   const m = manifest;
   const d = m.datasety ?? {};
@@ -95,6 +181,7 @@ const odkaz = (href, nadpis, popis) => `
     <div class="radek">${esc(popis)}</div>
   </div></div>`;
 
+// ---------------------------------------------------------------- usnesení ---
 let indexCache = null;
 async function nactiIndex() {
   if (!indexCache) {
@@ -112,13 +199,12 @@ async function usneseni(params) {
   const organ = params.get('organ') ?? '';
   const rok = params.get('rok') ?? '';
   const tema = params.get('tema') ?? '';
-  const strana = Number(params.get('strana') ?? 1);
 
   let vysledek = docs;
   if (q.trim()) {
     const slova = norm(q).split(/[^0-9a-z/]+/).filter((s) => s.length >= 3);
     if (slova.length) {
-      let mnoziny = slova.map((s) => {
+      const mnoziny = slova.map((s) => {
         const presne = tokens[s];
         if (presne) return new Set(presne);
         // prefixové dohledání — uživatel píše "rekonstruk", token je "rekonstrukce"
@@ -128,9 +214,7 @@ async function usneseni(params) {
       });
       mnoziny.sort((a, b) => a.size - b.size);
       const [prvni, ...zbytek] = mnoziny;
-      vysledek = [...prvni]
-        .filter((i) => zbytek.every((m) => m.has(i)))
-        .map((i) => docs[i]);
+      vysledek = [...prvni].filter((i) => zbytek.every((m) => m.has(i))).map((i) => docs[i]);
     }
   }
   if (organ) vysledek = vysledek.filter((d) => d.o === organ);
@@ -138,10 +222,7 @@ async function usneseni(params) {
   if (tema) vysledek = vysledek.filter((d) => d.t?.includes(tema));
   vysledek = vysledek.slice().sort((a, b) => (b.d ?? '').localeCompare(a.d ?? ''));
 
-  const naStranu = 25;
-  const stran = Math.max(1, Math.ceil(vysledek.length / naStranu));
-  const s = Math.min(Math.max(1, strana), stran);
-  const vyrez = vysledek.slice((s - 1) * naStranu, s * naStranu);
+  const { s, stran, kus } = vyrez(vysledek, params, 25);
   const vsechnaTemata = [...new Set(docs.flatMap((d) => d.t ?? []))].sort();
 
   app.innerHTML = `
@@ -158,35 +239,25 @@ async function usneseni(params) {
       </select>
       <select name="rok" aria-label="Rok">
         <option value="">Všechny roky</option>
-        ${manifest.usneseni.roky.map((r) => `<option${String(r) === rok ? ' selected' : ''}>${r}</option>`).join('')}
+        ${volby(manifest.usneseni.roky, rok)}
       </select>
       <select name="tema" aria-label="Téma">
         <option value="">Všechna témata</option>
-        ${vsechnaTemata.map((t) => `<option${t === tema ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+        ${volby(vsechnaTemata, tema)}
       </select>
       ${q ? `<button type="button" id="zrusHledani">Zrušit hledání „${esc(q)}“</button>` : ''}
       <span class="pocet">${fmtCislo(vysledek.length)} záznamů</span>
     </form>
 
-    ${vyrez.length ? `<div class="seznam">${vyrez.map(radekUsneseni).join('')}</div>` : '<p class="prazdno">Nic nenalezeno.</p>'}
-    ${stran > 1 ? strankovani(s, stran, params) : ''}`;
+    ${seznam(kus, radekUsneseni)}
+    ${strankovani(s, stran, vysledek.length, 25)}`;
 
-  document.getElementById('filtry')?.addEventListener('change', (e) => {
-    const f = new FormData(e.currentTarget);
-    const p = new URLSearchParams();
-    if (q) p.set('q', q);
-    for (const [k, v] of f) if (v) p.set(k, v);
-    location.hash = `#/usneseni?${p}`;
-  });
+  zapoj('/usneseni', params, ['q']);
   document.getElementById('zrusHledani')?.addEventListener('click', () => {
     const p = new URLSearchParams(params); p.delete('q'); p.delete('strana');
-    document.getElementById('q').value = '';
+    const pole = document.getElementById('q'); if (pole) pole.value = '';
     location.hash = `#/usneseni?${p}`;
   });
-  app.querySelectorAll('[data-strana]').forEach((b) => b.addEventListener('click', () => {
-    const p = new URLSearchParams(params); p.set('strana', b.dataset.strana);
-    location.hash = `#/usneseni?${p}`;
-  }));
 }
 
 const radekUsneseni = (d) => `
@@ -202,24 +273,28 @@ const radekUsneseni = (d) => `
     </div>
   </div>`;
 
-const strankovani = (s, stran) => `
-  <div class="strankovani">
-    <button data-strana="${s - 1}"${s <= 1 ? ' disabled' : ''}>← Předchozí</button>
-    <span>Strana ${s} z ${stran}</span>
-    <button data-strana="${s + 1}"${s >= stran ? ' disabled' : ''}>Další →</button>
-  </div>`;
-
-async function finance() {
+// ------------------------------------------------------------------ peníze ---
+async function finance(params) {
   const [rozpocet, faktury] = await Promise.all([
     nacti('rozpocet.json').catch(() => null),
     nacti('faktury.json').catch(() => null),
   ]);
   if (!rozpocet && !faktury) {
-    app.innerHTML = `<h1>Peníze</h1><p class="prazdno">Finanční data ještě nebyla načtena.</p>`;
+    app.innerHTML = '<h1>Peníze</h1><p class="prazdno">Finanční data ještě nebyla načtena.</p>';
     return;
   }
 
-  const polozky = faktury?.items ?? [];
+  const vsechny = faktury?.items ?? [];
+  const rok = params.get('rok') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = vsechny;
+  if (rok) vybrane = vybrane.filter((f) => (f.datum ?? '').startsWith(rok));
+  if (nq) vybrane = vybrane.filter((f) => norm(`${f.dodavatel ?? ''} ${f.popis ?? ''}`).includes(nq));
+
+  const soucet = vybrane.reduce((a, f) => a + (f.vydaj ?? 0), 0);
+  const { s, stran, kus } = vyrez(vybrane, params);
   const rozsah = faktury?.souhrn?.rozsah ?? {};
 
   app.innerHTML = `
@@ -233,26 +308,42 @@ async function finance() {
     </div>
 
     <h2>Největší dodavatelé</h2>
+    <p class="pod">Podle objemu ve vybraném období.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Dodavatel</th><th>Faktur</th><th>Celkem</th></tr></thead>
-      <tbody>${topDodavatele(polozky).map((d) => `
+      <tbody>${topDodavatele(vybrane).map((d) => `
         <tr><td>${esc(d.nazev)}</td><td class="c">${fmtCislo(d.pocet)}</td><td class="c">${fmtKc(d.suma)}</td></tr>
       `).join('')}</tbody>
     </table></div>
 
-    <h2>Poslední faktury</h2>
-    <div class="seznam">${polozky.slice(0, 60).map((f) => `
-      <div class="polozka">
-        <div class="meta">${fmtDatum(f.datum)}</div>
-        <div>
-          <h3>${esc(f.dodavatel ?? 'Neuvedeno')}</h3>
-          <div class="radek">
-            <span>${fmtKc(f.vydaj || f.prijem)}${f.prijem > f.vydaj ? ' příjem' : ''}</span>
-            ${f.popis ? `<span>${esc(f.popis)}</span>` : ''}
-          </div>
-        </div>
-      </div>`).join('')}</div>`;
+    <h2>Jednotlivé faktury</h2>
+    <form class="filtry" id="filtry">
+      <select name="rok" aria-label="Rok">
+        <option value="">Všechny roky</option>
+        ${volby(rokyZ(vsechny), rok)}
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Dodavatel nebo popis…"
+             aria-label="Hledat v fakturách">
+      <span class="pocet">${fmtCislo(vybrane.length)} faktur · ${fmtKc(soucet)}</span>
+    </form>
+
+    ${seznam(kus, radekFaktura, 'Žádná faktura neodpovídá zadání.')}
+    ${strankovani(s, stran, vybrane.length)}`;
+
+  zapoj('/finance', params);
 }
+
+const radekFaktura = (f) => `
+  <div class="polozka">
+    <div class="meta">${fmtDatum(f.datum)}</div>
+    <div>
+      <h3>${esc(f.dodavatel ?? 'Neuvedeno')}</h3>
+      <div class="radek">
+        <span>${fmtKc(f.vydaj || f.prijem)}${f.prijem > f.vydaj ? ' příjem' : ''}</span>
+        ${f.popis ? `<span>${esc(f.popis)}</span>` : ''}
+      </div>
+    </div>
+  </div>`;
 
 /** Sečte faktury podle dodavatele — nejrychlejší způsob, jak vidět, kam peníze tečou. */
 function topDodavatele(polozky, limit = 15) {
@@ -266,42 +357,131 @@ function topDodavatele(polozky, limit = 15) {
   return [...podle.values()].sort((a, b) => b.suma - a.suma).slice(0, limit);
 }
 
-async function smlouvy() {
+// ----------------------------------------------------------------- smlouvy ---
+async function smlouvy(params) {
   const ds = await nacti('smlouvy.json').catch(() => null);
   if (!ds) { app.innerHTML = '<h1>Smlouvy</h1><p class="prazdno">Zatím nenačteno.</p>'; return; }
+
+  const rok = params.get('rok') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = ds.items;
+  if (rok) vybrane = vybrane.filter((s) => (s.zverejneno ?? s.datum ?? '').startsWith(rok));
+  if (nq) vybrane = vybrane.filter((s) => norm(`${s.predmet ?? ''} ${s.protistrana ?? ''}`).includes(nq));
+
+  const soucet = vybrane.reduce((a, s) => a + (s.castkaBezDph ?? 0), 0);
+  const { s, stran, kus } = vyrez(vybrane, params);
+
   app.innerHTML = `
     <h1>Registr smluv</h1>
     <p class="podnadpis">Smlouvy městské části Praha 6, IČO ${esc(ds.ico ?? '00063703')}.
     Uvedená hodnota je cena bez DPH tak, jak ji strany do registru zapsaly — neříká,
     kterým směrem peníze tečou, a u části smluv chybí.</p>
     <div class="karty">
-      <div><div class="v">${fmtCislo(ds.pocet)}</div><div class="k">smluv</div></div>
+      <div><div class="v">${fmtCislo(ds.pocet)}</div><div class="k">smluv celkem</div></div>
       <div><div class="v">${fmtKc(ds.souhrn?.celkovaHodnota)}</div><div class="k">známá hodnota</div></div>
     </div>
-    <div class="seznam">${ds.items.slice(0, 100).map((s) => `
-      <div class="polozka"><div class="meta">${fmtDatum(s.zverejneno ?? s.datum)}</div>
-      <div><h3><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.predmet ?? 'Bez uvedeného předmětu')}</a></h3>
+
+    <form class="filtry" id="filtry">
+      <select name="rok" aria-label="Rok zveřejnění">
+        <option value="">Všechny roky</option>
+        ${volby(rokyZ(ds.items, 'zverejneno'), rok)}
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Předmět nebo protistrana…"
+             aria-label="Hledat ve smlouvách">
+      <span class="pocet">${fmtCislo(vybrane.length)} smluv · ${fmtKc(soucet)}</span>
+    </form>
+
+    ${seznam(kus, radekSmlouva, 'Žádná smlouva neodpovídá zadání.')}
+    ${strankovani(s, stran, vybrane.length)}`;
+
+  zapoj('/smlouvy', params);
+}
+
+const radekSmlouva = (s) => `
+  <div class="polozka">
+    <div class="meta">${fmtDatum(s.zverejneno ?? s.datum)}</div>
+    <div>
+      <h3><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.predmet ?? 'Bez uvedeného předmětu')}</a></h3>
       <div class="radek">
         <span>${fmtKc(s.castkaBezDph)}${s.castkaBezDph != null ? ' bez DPH' : ''}</span>
         ${s.protistrana ? `<span>${esc(s.protistrana)}</span>` : ''}
         ${s.datum ? `<span>uzavřeno ${fmtDatum(s.datum)}</span>` : ''}
-      </div></div></div>`).join('')}</div>`;
-}
+      </div>
+    </div>
+  </div>`;
 
-async function deska() {
+// ------------------------------------------------------------ úřední deska ---
+async function deska(params) {
   const ds = await nacti('deska.json').catch(() => null);
   if (!ds) { app.innerHTML = '<h1>Úřední deska</h1><p class="prazdno">Zatím nenačteno.</p>'; return; }
+
+  const rok = params.get('rok') ?? '';
+  const oblast = params.get('oblast') ?? '';
+  const stav = params.get('stav') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = ds.items;
+  if (rok) vybrane = vybrane.filter((d) => (d.vyveseno ?? '').startsWith(rok));
+  if (oblast) vybrane = vybrane.filter((d) => d.oblast === oblast);
+  if (stav === 'vyveseno') vybrane = vybrane.filter((d) => d.naDesce);
+  if (stav === 'sejmuto') vybrane = vybrane.filter((d) => !d.naDesce);
+  if (nq) vybrane = vybrane.filter((d) => norm(d.nazev ?? '').includes(nq));
+
+  const { s, stran, kus } = vyrez(vybrane, params);
+  const oblasti = [...new Set(ds.items.map((d) => d.oblast).filter(Boolean))].sort();
+
   app.innerHTML = `
     <h1>Úřední deska</h1>
     <p class="podnadpis">Radnice zveřejňuje jen aktuálně vyvěšené dokumenty. Archiv níže
-    vzniká tím, že si zaznamenáváme, co jsme kdy na desce viděli.</p>
-    <div class="seznam">${ds.items.slice(0, 200).map((d) => `
-      <div class="polozka"><div class="meta">${fmtDatum(d.vyveseno)}</div>
-      <div><h3><a href="${esc(d.url ?? '#')}" target="_blank" rel="noopener">${esc(d.nazev)}</a></h3>
-      <div class="radek">${d.naDesce ? '<span class="badge RMC">Vyvěšeno</span>' : '<span class="stitek">Sejmuto</span>'}
-      ${d.oblast ? `<span>${esc(d.oblast)}</span>` : ''}</div></div></div>`).join('')}</div>`;
+    vzniká tím, že si zaznamenáváme, co jsme kdy na desce viděli — roste tedy ode dne,
+    kdy tenhle web začal běžet.</p>
+    <div class="karty">
+      <div><div class="v">${fmtCislo(ds.naDesce)}</div><div class="k">aktuálně vyvěšeno</div></div>
+      <div><div class="v">${fmtCislo(ds.pocet)}</div><div class="k">v archivu celkem</div></div>
+    </div>
+
+    <form class="filtry" id="filtry">
+      <select name="stav" aria-label="Stav">
+        <option value="">Vyvěšené i sejmuté</option>
+        <option value="vyveseno"${stav === 'vyveseno' ? ' selected' : ''}>Jen vyvěšené</option>
+        <option value="sejmuto"${stav === 'sejmuto' ? ' selected' : ''}>Jen sejmuté</option>
+      </select>
+      <select name="rok" aria-label="Rok vyvěšení">
+        <option value="">Všechny roky</option>
+        ${volby(rokyZ(ds.items, 'vyveseno'), rok)}
+      </select>
+      <select name="oblast" aria-label="Oblast">
+        <option value="">Všechny oblasti</option>
+        ${volby(oblasti, oblast)}
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Název dokumentu…"
+             aria-label="Hledat na úřední desce">
+      <span class="pocet">${fmtCislo(vybrane.length)} dokumentů</span>
+    </form>
+
+    ${seznam(kus, radekDeska, 'Žádný dokument neodpovídá zadání.')}
+    ${strankovani(s, stran, vybrane.length)}`;
+
+  zapoj('/deska', params);
 }
 
+const radekDeska = (d) => `
+  <div class="polozka">
+    <div class="meta">${fmtDatum(d.vyveseno)}</div>
+    <div>
+      <h3><a href="${esc(d.url ?? '#')}" target="_blank" rel="noopener">${esc(d.nazev)}</a></h3>
+      <div class="radek">
+        ${d.naDesce ? '<span class="badge RMC">Vyvěšeno</span>' : '<span class="stitek">Sejmuto</span>'}
+        ${d.oblast ? `<span>${esc(d.oblast)}</span>` : ''}
+        ${d.sveseno ? `<span>sejmutí ${fmtDatum(d.sveseno)}</span>` : ''}
+      </div>
+    </div>
+  </div>`;
+
+// ------------------------------------------------------------------ zdroje ---
 async function zdroje() {
   app.innerHTML = `
     <h1>Zdroje a metodika</h1>
@@ -321,18 +501,19 @@ async function zdroje() {
     </div>
     <h2>Co tu zatím chybí</h2>
     <p><strong>Jmenovité hlasování zastupitelů.</strong> Zastupitelstvo hlasuje elektronickým
-    zařízením a jednací řád (§ 15 odst. 8) ukládá zveřejnit jmenovitá hlasování do tří dnů.
-    Portál usnesení má pro ně připravená pole, ale nejsou naplněná. Otevřená data z let
-    2014–2018 existovala, jejich soubory dnes vracejí chybu. Dokud radnice publikaci
+    zařízením a jednací řád (§ 15 odst. 8) ukládá zveřejnit jmenovitá hlasování do tří dnů
+    po ověření zápisu. Portál usnesení má pro ně připravená pole, ale nejsou naplněná. Otevřená
+    data z let 2014–2018 existovala, jejich soubory dnes vracejí chybu. Dokud radnice publikaci
     nezapne, umí tento web ukázat jen účast a souhrnné výsledky ze zápisů.</p>`;
 }
 
 const zdrojRadek = (nazev, url, popis) => `
   <div class="polozka"><div class="meta">●</div><div>
     <h3><a href="${esc(url)}" target="_blank" rel="noopener">${esc(nazev)}</a></h3>
-    <div class="radek">${esc(popis)}</div></div></div>`;
+    <div class="radek">${esc(popis)}</div></div>
+  </div>`;
 
-// -------------------------------------------------------------------- init --
+// ==================================================================== init ===
 document.getElementById('formHledat').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = document.getElementById('q').value.trim();
@@ -348,6 +529,6 @@ try {
   await route();
 } catch (err) {
   app.innerHTML = `<div class="chyba"><strong>Data zatím nejsou k dispozici.</strong><br>
-    Spusť synchronizaci (<code>npm run daily</code>) nebo workflow v GitHub Actions.<br>
+    Spusť synchronizaci nebo workflow v GitHub Actions.<br>
     <span class="drobne">${esc(err.message)}</span></div>`;
 }
