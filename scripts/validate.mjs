@@ -54,6 +54,31 @@ for (const name of ['smlouvy', 'faktury', 'rozpocet', 'zapisy', 'deska']) {
   ok(`${name}: ${ds.pocet}`);
 }
 
+// Zakázky: hlídá se, že se profil pořád čte celý a že párování se smlouvami
+// nezmizelo. Obojí se umí rozbít tiše — scraper doběhne, jen vrátí prázdno.
+const zakazky = await readDataset('zakazky');
+if (!zakazky) {
+  info('zakazky: zatím nenaplněno');
+} else {
+  zakazky.pocet >= 400
+    ? ok(`zakázky: ${zakazky.pocet}`)
+    : chyba(`zakázek jen ${zakazky.pocet}, profil jich má přes 400 — asi se nepropsal filtr archivu`);
+
+  const p = zakazky.pokryti ?? {};
+  p.sDodavatelem > 0
+    ? ok(`zakázky s vybraným dodavatelem: ${p.sDodavatelem} z ${p.zadane} zadaných`)
+    : chyba('ani jedna zakázka nemá vybraného dodavatele — rozbité čtení detailu');
+
+  const prehled = await readDataset('zakazky-prehled');
+  if (!prehled) {
+    chyba('zakazky.json existuje, ale zakazky-prehled.json ne — neproběhl build-index');
+  } else if ((prehled.souhrn?.sparovanych ?? 0) === 0) {
+    chyba('žádná zakázka se nespárovala se smlouvou v registru');
+  } else {
+    ok(`zakázek spárovaných se smlouvami: ${prehled.souhrn.sparovanych}`);
+  }
+}
+
 for (const k of kontroly) {
   console.log(`${k.ok === null ? '·' : k.ok ? '✓' : '✗'} ${k.msg}`);
 }

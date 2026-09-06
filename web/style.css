@@ -4,6 +4,8 @@
   --rule:#d5dade; --accent:#1f4b8f; --accent-soft:#e4eaf4;
   --zmc:#8a3d12; --rmc:#1f4b8f;
   --znacka:#0f7f9e;
+  --rust:#8a3d12; --rust-soft:#f3e3da;
+  --pokles:#1f6b45; --pokles-soft:#dcece3;
 }
 @media (prefers-color-scheme: dark){
   :root{
@@ -12,6 +14,8 @@
     --rule:#2b333a; --accent:#7fa7e0; --accent-soft:#1b2a3d;
     --zmc:#e0a07a; --rmc:#7fa7e0;
     --znacka:#5cc0dd;
+    --rust:#e5a883; --rust-soft:#33241c;
+    --pokles:#7cc7a1; --pokles-soft:#172b22;
   }
 }
 *{box-sizing:border-box}
@@ -239,3 +243,43 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 .stitek-odkaz{color:var(--accent);text-decoration:none}
 .stitek-odkaz:hover{text-decoration:underline}
 .polozka .radek.tlumene{color:var(--faint);font-size:.78rem;margin-top:.25em}
+
+/* ---------------------------------------------------------------- zakázky --- */
+/* Evidenční číslo zakázky je identifikátor, ne popisek — proto neproporcionální
+   písmo; v seznamu se pak dá očima rychle projet sloupec čísel. */
+.stitek.kod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.72rem}
+.stitek.faze.zadana{background:var(--pokles-soft);color:var(--pokles)}
+.stitek.faze.zrusena{background:var(--surface-2);color:var(--faint);text-decoration:line-through}
+.stitek.rust{background:var(--rust-soft);color:var(--rust);font-weight:600}
+.stitek.pokles{background:var(--pokles-soft);color:var(--pokles);font-weight:600}
+.stitek.zadana{background:var(--pokles-soft);color:var(--pokles)}
+
+/* Peněžní hodnota v dlaždici je delší než počet — bez zmenšení se zalomí
+   tak, že se „Kč" ocitne na druhém řádku. */
+.karty .v.dlouha{font-size:1.28rem;letter-spacing:-.01em}
+.osa-krok.duplikat{opacity:.6}
+.osa-krok.duplikat .osa-castka{text-decoration:line-through;font-weight:400}
+
+/* Cenová osa zakázky: smlouva a její dodatky pod sebou v čase.
+   Proužek je jen pomůcka pro poměr částek — číslo vpravo je to podstatné,
+   proto má pevnou šířku a neproporcionální číslice. */
+.osa{display:flex;flex-direction:column;gap:2px;margin:.6em 0 1em}
+.osa-krok{
+  display:grid;grid-template-columns:6.5em 1fr 9.5em;gap:10px;align-items:center;
+  background:var(--surface);padding:8px 12px;border-left:3px solid var(--accent);
+}
+.osa-krok.dodatek{border-left-color:var(--rule);margin-left:18px}
+.osa-datum{font-size:.78rem;color:var(--faint);font-variant-numeric:tabular-nums}
+.osa-nazev{font-size:.88rem;line-height:1.35}
+.osa-nazev a{color:var(--ink)}
+.osa-drah{height:4px;background:var(--surface-2);border-radius:2px;margin-top:5px;overflow:hidden}
+.osa-pruh{display:block;height:100%;background:var(--accent);border-radius:2px}
+.osa-krok.dodatek .osa-pruh{background:var(--rust)}
+.osa-castka{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:.9rem}
+
+@media (max-width:640px){
+  .osa-krok{grid-template-columns:1fr auto;row-gap:2px}
+  .osa-krok .osa-nazev{grid-column:1 / -1;order:3}
+  .osa-krok .osa-drah{grid-column:1 / -1;order:4}
+  .osa-krok.dodatek{margin-left:10px}
+}

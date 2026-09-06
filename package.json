@@ -13,10 +13,11 @@
     "sync:organizace": "node scripts/sync-smlouvy-organizace.mjs",
     "sync:deska": "node scripts/sync-deska.mjs",
     "sync:scitani": "node scripts/sync-scitani.mjs",
+    "sync:zakazky": "node scripts/sync-zakazky.mjs",
     "merge": "node scripts/merge-usneseni.mjs",
     "index": "node scripts/build-index.mjs",
     "validate": "node scripts/validate.mjs",
-    "test": "node tests/test-organizace.mjs && node tests/test-dotace.mjs && node tests/test-smlouvy.mjs",
+    "test": "node tests/test-organizace.mjs && node tests/test-dotace.mjs && node tests/test-smlouvy.mjs && node tests/test-zakazky.mjs",
     "probe": "node scripts/probe-sources.mjs",
     "daily": "npm run sync:usneseni-marbes && npm run sync:deska && npm run sync:smlouvy && npm run merge && npm run index && npm run validate"
   },

@@ -10,6 +10,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readItems, readDataset, writeDataset, norm, DATA_DIR } from './lib/util.mjs';
 import { sestav as sestavDotace, zkontroluj as zkontrolujDotace } from './lib/dotace.mjs';
+import { sparuj as sparujZakazky, zkontroluj as zkontrolujZakazky } from './lib/zakazky.mjs';
 
 const OUT = path.join(DATA_DIR, 'web');
 await rm(OUT, { recursive: true, force: true });
@@ -100,7 +101,36 @@ if (smlouvyProDotace.length) {
   console.warn('  ! chybí data/smlouvy.json, dotace se nepřepočítaly');
 }
 
-// ---- 4) manifest pro frontend ----------------------------------------------
+// ---- 4) zakázky spárované se smlouvami -------------------------------------
+// Profil zadavatele se stahuje zvlášť (sync:zakazky), ale spojení se smlouvami
+// se musí přepočítat pokaždé — registr smluv se mění denně a s ním i cenová
+// osa každé zakázky.
+const zakazkyRaw = await readItems('zakazky');
+if (zakazkyRaw.length) {
+  const smlouvyProZakazky = await readItems('smlouvy');
+  const vysledek = sparujZakazky(zakazkyRaw, smlouvyProZakazky);
+  const potize = zkontrolujZakazky(vysledek);
+  if (potize.length) {
+    console.warn('  ! zakázky neprošly kontrolou, dataset nepřepisuji:');
+    for (const x of potize) console.warn(`     ✗ ${x}`);
+  } else {
+    await writeDataset('zakazky-prehled', vysledek.items, {
+      souhrn: vysledek.souhrn,
+      poznamka: 'Zakázky z profilu zadavatele MČ Praha 6 spojené se smlouvami '
+        + 'v registru smluv podle evidenčního čísla. Konečná cena je odvozená '
+        + 'z dodatků a u části zakázek ji nelze určit — registr nerozlišuje, '
+        + 'jestli dodatek uvádí novou celkovou cenu, nebo jen přírůstek.',
+    });
+    const s6 = vysledek.souhrn;
+    console.log(`  zakázky: ${s6.celkem} (zadaných ${s6.zadanych}, zrušených ${s6.zrusenych}), `
+      + `spárováno se smlouvami ${s6.sparovanych}, smluvní cena `
+      + `${s6.smluvniCena.toLocaleString('cs-CZ')} Kč`);
+  }
+} else {
+  console.warn('  ! chybí data/zakazky.json, sekce zakázek se nepřepočítala');
+}
+
+// ---- 5) manifest pro frontend ----------------------------------------------
 const manifest = {
   aktualizovano: new Date().toISOString(),
   usneseni: {
@@ -111,7 +141,8 @@ const manifest = {
   },
   datasety: {},
 };
-for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska', 'scitani', 'smlouvy-organizace', 'dotace']) {
+for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska', 'scitani',
+  'smlouvy-organizace', 'dotace', 'zakazky-prehled']) {
   const ds = await readDataset(name);
   if (ds) manifest.datasety[name] = { pocet: ds.pocet, aktualizovano: ds.aktualizovano };
 }

@@ -136,6 +136,7 @@ const routes = {
   '/dotace': dotace,
   '/dotace-prijemci': dotace,
   '/dotace-prijate': dotace,
+  '/zakazky': zakazky,
   '/deska': deska,
   '/scitani': scitani,
   '/zdroje': zdroje,
@@ -179,6 +180,7 @@ async function domu() {
       <div><div class="v">${fmtCislo(d.zapisy?.pocet)}</div><div class="k">zápisů a programů</div></div>
       <div><div class="v">${fmtCislo(d['smlouvy-organizace']?.pocet)}</div><div class="k">smluv zřizovaných organizací</div></div>
       <div><div class="v">${fmtCislo(d.dotace?.pocet)}</div><div class="k">dotačních smluv</div></div>
+      <div><div class="v">${fmtCislo(d['zakazky-prehled']?.pocet)}</div><div class="k">veřejných zakázek</div></div>
       <div><div class="v">${fmtCislo(d.deska?.pocet)}</div><div class="k">položek úřední desky</div></div>
     </div>
     <h2>Kde začít</h2>
@@ -186,6 +188,7 @@ async function domu() {
       ${odkaz('#/usneseni', 'Usnesení a jednání', 'Rada i zastupitelstvo, filtr podle orgánu, roku a tématu, fulltext v plném znění.')}
       ${odkaz('#/finance', 'Peníze', 'Položkový rozpočet a jednotlivé faktury z CityVizoru.')}
       ${odkaz('#/smlouvy', 'Registr smluv', 'Smlouvy městské části podle IČO 00063703.')}
+      ${odkaz('#/zakazky', 'Veřejné zakázky', 'Co se soutěžilo, kdo vyhrál, za kolik se to podepsalo a jak cenu změnily dodatky.')}
       ${odkaz('#/deska', 'Úřední deska', 'Aktuálně vyvěšené dokumenty a průběžně budovaný archiv.')}
       ${odkaz('#/dotace', 'Dotace', 'Kdo dostal od radnice dotaci, kdy, na co a kolik — i souhrn za jednotlivé příjemce.')}
       ${odkaz('#/organizace', 'Zřizované organizace', 'Smlouvy škol, školek, Léčebny, Pečovatelské služby, KITT6 a SNEO — každý subjekt zvlášť.')}
@@ -1052,6 +1055,257 @@ async function scitani() {
     <p class="metodika">Všechna čísla pocházejí z otevřených dat ČSÚ za území
     <code>${esc(d.uzemi.cis)}/${esc(d.uzemi.kod)}</code> — městská část Praha 6.
     <a href="${esc(d.zdrojUrl)}" target="_blank" rel="noopener">Zdrojové datové sady</a>.</p>`;
+}
+
+// ================================================================ zakázky ===
+// Profil zadavatele ukáže, za kolik se zakázka vysoutěžila; registr smluv ukáže,
+// co se s cenou dělo dál. Teprve dohromady je z toho odpověď na otázku, jestli
+// to nakonec stálo tolik, kolik se slibovalo.
+
+const VYKLAD_POPIS = {
+  'bez-dodatku': 'Beze změny — k zakázce zatím není dodatek s cenou.',
+  celkova: 'Dodatky uvádějí novou celkovou cenu; platí ta z posledního dodatku.',
+  prirustkova: 'Dodatky uvádějí přírůstky; konečná cena je jejich součet se smlouvou.',
+  nejiste: 'Dodatky si odporují — část vypadá jako nová celková cena, část jako '
+    + 'přírůstek. Konečnou cenu z registru poctivě určit nelze.',
+  neznama: 'Ve smlouvách k této zakázce není uvedena cena.',
+};
+
+const POZNAMKA_ZAKAZKY = `
+  <p class="poznamka"><strong>Dva zdroje, dvě různé věci.</strong> Z profilu zadavatele
+  je předpokládaná hodnota, vybraný dodavatel a smluvní cena při podpisu.
+  Z registru smluv je to, co s cenou udělaly dodatky. Registr ale nerozlišuje, jestli
+  dodatek uvádí novou <em>celkovou</em> cenu, nebo jen <em>přírůstek</em> — u části zakázek
+  to poznat nejde a ty pak konečnou cenu nemají. Skutečně uhrazená cena je pole
+  na profilu, které radnice u většiny zakázek nechává vyplněné nulami.</p>`;
+
+/** Odznak se změnou ceny po dodatcích. */
+function odznakZmeny(z) {
+  if (z.vyklad === 'nejiste') return '<span class="stitek odhad" title="Dodatky si odporují">cena nejistá</span>';
+  if (z.zmena == null || Math.abs(z.zmena) < 0.005) return '';
+  const p = Math.round(z.zmena * 100);
+  return `<span class="stitek ${p > 0 ? 'rust' : 'pokles'}"
+    title="Cena při podpisu ${fmtKc(z.zaklad)} → po dodatcích ${fmtKc(z.konecna)}">${p > 0 ? '+' : ''}${p} % po dodatcích</span>`;
+}
+
+const fazeTrida = (f) => (/zru[šs]eno/i.test(f ?? '') ? ' zrusena'
+  : /zad[áa]no|uzav[řr]eno|ukon[čc]eno|objedn[áa]no/i.test(f ?? '') ? ' zadana' : '');
+
+async function zakazky(params) {
+  const ds = await nacti('zakazky-prehled.json').catch(() => null);
+  if (!ds?.souhrn) {
+    app.innerHTML = `<h1>Veřejné zakázky</h1>
+      <p class="prazdno">Profil zadavatele ještě nebyl načten.</p>`;
+    return;
+  }
+  if (params.get('z')) return zakazkaDetail(params, ds);
+  return zakazkySeznam(params, ds);
+}
+
+function zakazkySeznam(params, ds) {
+  const s = ds.souhrn;
+  const rok = params.get('rok') ?? '';
+  const rezim = params.get('rezim') ?? '';
+  const stav = params.get('stav') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = [...ds.items].sort((a, b) => (b.zahajeni ?? '').localeCompare(a.zahajeni ?? ''));
+  if (rok) vybrane = vybrane.filter((z) => z.zahajeni?.slice(0, 4) === rok);
+  if (rezim) vybrane = vybrane.filter((z) => z.rezim === rezim);
+  if (stav === 'zadane') vybrane = vybrane.filter((z) => fazeTrida(z.faze) === ' zadana');
+  if (stav === 'zrusene') vybrane = vybrane.filter((z) => fazeTrida(z.faze) === ' zrusena');
+  if (stav === 'zdrazene') vybrane = vybrane.filter((z) => z.zmena > 0.005);
+  if (stav === 'nesparovane') vybrane = vybrane.filter((z) => z.smluv === 0);
+  if (nq) {
+    vybrane = vybrane.filter((z) =>
+      norm(`${z.nazev ?? ''} ${z.kod ?? ''} ${z.dodavatelNazev ?? ''} ${z.popis ?? ''}`).includes(nq));
+  }
+
+  const soucet = vybrane.reduce((a, z) => a + (z.cenaProfil ?? 0), 0);
+  const { s: strana, stran, kus } = vyrez(vybrane, params);
+  const roky = [...new Set(ds.items.map((z) => z.zahajeni?.slice(0, 4)).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+  const rezimy = [...new Set(ds.items.map((z) => z.rezim).filter(Boolean))].sort();
+  const d = s.dodatky;
+
+  app.innerHTML = `
+    <p class="nadsekce">Profil zadavatele · registr smluv</p>
+    <h1>Veřejné zakázky</h1>
+    <p class="podnadsekce">Co městská část soutěžila, kdo vyhrál, za kolik se to podepsalo
+    a jak se cena změnila dodatky. Spojené z profilu zadavatele v E-ZAKu a z registru smluv
+    podle evidenčního čísla zakázky.</p>
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(s.celkem)}</div><div class="k">zakázek na profilu</div></div>
+      <div><div class="v">${fmtCislo(s.zadanych)}</div><div class="k">zadaných</div></div>
+      <div><div class="v dlouha">${fmtKc(s.smluvniCena)}</div><div class="k">smluvní cena ${fmtCislo(s.sCenou)} zakázek</div></div>
+      ${d.zakazek ? `<div><div class="v">${d.zmena > 0 ? '+' : ''}${Math.round(d.zmena * 100)} %</div>
+        <div class="k">změna ceny u ${fmtCislo(d.zakazek)} zakázek s dodatky</div></div>` : ''}
+    </div>
+
+    <p class="pod">Z ${fmtCislo(s.celkem)} zakázek na profilu je ${fmtCislo(s.zadanych)} zadaných
+    a ${fmtCislo(s.zrusenych)} zrušených; ${fmtCislo(s.sparovanych)} se podařilo spojit se smlouvou
+    v registru${s.bezKodu ? ` (${fmtCislo(s.bezKodu)} zakázek nemá evidenční číslo ve tvaru,
+    podle kterého by to šlo)` : ''}. Předpokládanou hodnotu radnice vyplnila
+    u ${fmtCislo(s.sPredpokladem)} z nich, nabídkové ceny neúspěšných uchazečů
+    u ${fmtCislo(s.sNabidkami)} a skutečně uhrazenou cenu u ${fmtCislo(s.uhrazenoVyplneno)}
+    z ${fmtCislo(s.uhrazenoTabulka)}, které pro ni mají na profilu připravenou tabulku.</p>
+
+    ${d.zakazek ? `<p class="pod">Zakázky, u kterých jde cenu porovnat, se podepsaly za
+      <strong>${fmtKc(d.zaklad)}</strong> a po dodatcích stojí <strong>${fmtKc(d.konecna)}</strong>
+      — o ${fmtKc(d.konecna - d.zaklad)} víc. Podražilo jich ${fmtCislo(d.podrazilo)},
+      zlevnilo ${fmtCislo(d.zlevnilo)}${s.nejistych ? `; u ${fmtCislo(s.nejistych)} dalších
+      nejde konečnou cenu z registru určit` : ''}.</p>` : ''}
+
+    ${POZNAMKA_ZAKAZKY}
+
+    <form class="filtry" id="filtry">
+      <select name="rok" aria-label="Rok zahájení">
+        <option value="">Všechny roky</option>
+        ${volby(roky, rok)}
+      </select>
+      <select name="rezim" aria-label="Režim zakázky">
+        <option value="">Všechny režimy</option>
+        ${volby(rezimy, rezim)}
+      </select>
+      <select name="stav" aria-label="Výběr">
+        <option value="">Všechny zakázky</option>
+        <option value="zadane"${stav === 'zadane' ? ' selected' : ''}>Jen zadané</option>
+        <option value="zrusene"${stav === 'zrusene' ? ' selected' : ''}>Jen zrušené</option>
+        <option value="zdrazene"${stav === 'zdrazene' ? ' selected' : ''}>Jen ty, které podražily</option>
+        <option value="nesparovane"${stav === 'nesparovane' ? ' selected' : ''}>Bez smlouvy v registru</option>
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Název, číslo nebo dodavatel…"
+             aria-label="Hledat v zakázkách">
+      <span class="pocet">${fmtCislo(vybrane.length)} zakázek · ${fmtKc(soucet)}</span>
+    </form>
+
+    ${seznam(kus, radekZakazky, 'Žádná zakázka neodpovídá zadání.')}
+    ${strankovani(strana, stran, vybrane.length)}`;
+
+  zapoj('/zakazky', params);
+}
+
+const radekZakazky = (z) => `
+  <div class="polozka">
+    <div class="meta">${z.zahajeni ? fmtDatum(z.zahajeni) : '—'}</div>
+    <div>
+      <h3><a href="#/zakazky?z=${z.dbid}">${esc(z.nazev ?? z.kod ?? 'Bez názvu')}</a></h3>
+      <div class="radek">
+        ${z.kod ? `<span class="stitek kod">${esc(z.kod)}</span>` : ''}
+        <span class="stitek faze${fazeTrida(z.faze)}">${esc(z.faze ?? 'neuvedeno')}</span>
+        ${z.rezim ? `<span class="stitek">${esc(z.rezim)}</span>` : ''}
+        ${z.cenaProfil != null ? `<span class="castka">${fmtKc(z.cenaProfil)}</span>` : ''}
+        ${odznakZmeny(z)}
+      </div>
+      ${z.dodavatelNazev ? `<div class="radek tlumene">Vybraný dodavatel: ${esc(z.dodavatelNazev)}${
+        z.ucastniku > 1 ? ` · ${z.ucastniku} účastníků` : ''}</div>` : ''}
+    </div>
+  </div>`;
+
+function zakazkaDetail(params, ds) {
+  const z = ds.items.find((x) => String(x.dbid) === params.get('z'));
+  if (!z) {
+    app.innerHTML = `<p class="prazdno">Taková zakázka tu není.</p>
+      <p><a href="#/zakazky">← Zpět na zakázky</a></p>`;
+    return;
+  }
+
+  const kroky = z.smlouvy ?? [];
+  const maxCena = Math.max(1, ...kroky.map((k) => Math.abs(k.castka ?? 0)));
+
+  app.innerHTML = `
+    <p class="nadsekce"><a href="#/zakazky">Veřejné zakázky</a></p>
+    <h1>${esc(z.nazev ?? z.kod ?? 'Zakázka')}</h1>
+    <div class="radek">
+      ${z.kod ? `<span class="stitek kod">${esc(z.kod)}</span>` : ''}
+      <span class="stitek faze${fazeTrida(z.faze)}">${esc(z.faze ?? 'neuvedeno')}</span>
+      ${z.rezim ? `<span class="stitek">${esc(z.rezim)}</span>` : ''}
+      ${z.druh ? `<span class="stitek">${esc(z.druh)}</span>` : ''}
+      ${z.archiv ? '<span class="stitek">v archivu</span>' : ''}
+    </div>
+    ${z.popis ? `<p class="podnadsekce">${esc(z.popis)}</p>` : ''}
+
+    <div class="karty">
+      <div><div class="v dlouha">${z.predpokladanaHodnota != null ? fmtKc(z.predpokladanaHodnota) : '—'}</div>
+        <div class="k">předpokládaná hodnota</div></div>
+      <div><div class="v dlouha">${z.cenaProfil != null ? fmtKc(z.cenaProfil) : '—'}</div>
+        <div class="k">smluvní cena při podpisu</div></div>
+      <div><div class="v dlouha">${z.konecna != null ? fmtKc(z.konecna) : '—'}</div>
+        <div class="k">cena po ${fmtCislo(z.dodatku)} dodatcích</div></div>
+      <div><div class="v dlouha">${z.uhrazenoVyplneno ? fmtKc(z.uhrazenoCelkem) : '—'}</div>
+        <div class="k">skutečně uhrazeno${z.uhrazeno?.length && !z.uhrazenoVyplneno ? ' (nevyplněno)' : ''}</div></div>
+    </div>
+
+    <h2>Jak se cena měnila</h2>
+    ${kroky.length ? `
+      <p class="pod">${esc(VYKLAD_POPIS[z.vyklad] ?? '')}</p>
+      <div class="osa">
+        ${kroky.map((k) => `
+          <div class="osa-krok${k.typ === 'dodatek' ? ' dodatek' : ''}${k.duplikat ? ' duplikat' : ''}">
+            <div class="osa-datum">${fmtDatum(k.datum)}</div>
+            <div class="osa-telo">
+              <div class="osa-nazev">${k.url
+                ? `<a href="${esc(k.url)}" target="_blank" rel="noopener">${esc(k.predmet ?? '—')}</a>`
+                : esc(k.predmet ?? '—')}${k.duplikat
+                ? ' <span class="stitek odhad" title="Tentýž dokument je v registru uveřejněný podruhé; do ceny se počítá jednou">druhé uveřejnění</span>' : ''}</div>
+              <div class="osa-drah"><span class="osa-pruh" style="width:${
+                ((Math.abs(k.castka ?? 0) / maxCena) * 100).toFixed(1)}%"></span></div>
+            </div>
+            <div class="osa-castka">${k.castka != null ? fmtKc(k.castka) : 'bez ceny'}</div>
+          </div>`).join('')}
+      </div>
+      ${z.duplicit ? `<p class="drobne">Pozor: ${fmtCislo(z.duplicit)} ${
+        z.duplicit === 1 ? 'záznam je v registru' : 'záznamy jsou v registru'} uveřejněn${
+        z.duplicit === 1 ? '' : 'y'} dvakrát. Do ceny se počítá jen jednou.</p>` : ''}
+      ${z.vyklad === 'prirustkova'
+        ? '<p class="drobne">Částky u dodatků jsou přírůstky, ne celková cena zakázky.</p>'
+        : z.vyklad === 'celkova'
+          ? '<p class="drobne">Částky u dodatků jsou nové celkové ceny, nesčítají se.</p>' : ''}`
+    : '<p class="prazdno">K této zakázce se v registru smluv nenašla žádná smlouva. '
+      + 'Buď ještě není uveřejněná, nebo v jejím předmětu není číslo zakázky.</p>'}
+
+    ${z.rozporSProfilem ? `<p class="poznamka"><strong>Ceny se rozcházejí.</strong>
+      Profil uvádí smluvní cenu ${fmtKc(z.cenaProfil)}, smlouva v registru
+      ${fmtKc(z.zaklad)}. Rozdíl může být DPH, jiný rozsah plnění, nebo chyba v jednom
+      ze zdrojů — stojí za ověření v dokumentech.</p>` : ''}
+
+    <h2>Kdo se o zakázku ucházel</h2>
+    ${z.ucastnici?.length ? `
+      <div class="seznam">
+        ${z.ucastnici.map((u) => `
+          <div class="polozka">
+            <div class="meta">${u.vyloucen ? '✗' : '●'}</div>
+            <div>
+              <h3>${esc(u.nazev ?? '—')}</h3>
+              <div class="radek">
+                ${u.ico ? `<span class="stitek">IČO ${esc(u.ico)}</span>` : ''}
+                ${u.nabidkaBezDph != null ? `<span class="castka">${fmtKc(u.nabidkaBezDph)}</span>` : ''}
+                ${u.vyloucen ? '<span class="stitek odhad">nevybrán</span>' : ''}
+                ${z.dodavatelIco && u.ico === z.dodavatelIco ? '<span class="stitek zadana">vybraný dodavatel</span>' : ''}
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+      ${z.nabidek === 0 ? '<p class="drobne">Nabídkové ceny účastníků radnice u této zakázky nezveřejnila.</p>' : ''}`
+    : '<p class="prazdno">Seznam účastníků není na profilu vyplněn.</p>'}
+
+    ${z.uhrazeno?.length ? `
+      <h2>Skutečně uhrazeno po letech</h2>
+      ${z.uhrazenoVyplneno
+        ? `<div class="grafy">${z.uhrazeno.map((u) => pruhKc(String(u.rok), u.bezDph ?? 0,
+            Math.max(1, ...z.uhrazeno.map((x) => x.bezDph ?? 0)), z.uhrazenoCelkem)).join('')}</div>`
+        : `<p class="prazdno">Tabulka na profilu existuje (roky ${z.uhrazeno.map((u) => u.rok).join(', ')}),
+           ale je vyplněná nulami. Kolik se opravdu zaplatilo, se z profilu nedozvíme.</p>`}` : ''}
+
+    <p class="metodika">
+      <a href="${esc(z.url)}" target="_blank" rel="noopener">Detail zakázky na profilu zadavatele</a>
+      ${z.systemove ? ` · systémové číslo ${esc(z.systemove)}` : ''}
+      ${z.evidencni ? ` · evidenční číslo ${esc(z.evidencni)}` : ''}
+      ${z.dokumentu ? ` · ${fmtCislo(z.dokumentu)} veřejných dokumentů` : ''}
+      ${z.postup ? `<br>Postup zadání: ${esc(z.postup)}` : ''}
+      ${z.zakon ? ` · ${esc(z.zakon)}` : ''}
+    </p>`;
 }
 
 // ------------------------------------------------------------------ zdroje ---
