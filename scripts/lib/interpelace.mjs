@@ -13,6 +13,91 @@ export const BASE = 'https://interpelace.praha6.cz';
 export const API = `${BASE}/api/1.0/inter/published/`;
 const JEDNANI = 'https://usneseni.praha6.cz:1190/usneseni-pozvanky/jednani';
 
+/**
+ * Jména občanů se na webu zkracují na iniciály; jména zastupitelů zůstávají celá.
+ *
+ * Zastupitel interpeluje ve veřejné funkci, občan ne. Radnice sama jména občanů
+ * v přepisech na iniciály zkracuje („Pan J. M."), jen ne důsledně — u 237 ze 433
+ * občanských interpelací je v přepisu i celé jméno. Zkrátit jen popisek „Podal"
+ * a nechat jméno v textu by byla kosmetika, ne ochrana, takže se nahrazuje obojí.
+ *
+ * Přepnutím na false se přebírá vše tak, jak to zveřejňuje radnice.
+ */
+export const ANONYMIZOVAT_OBCANY = true;
+
+/** Tituly, které nejsou součástí jména a do iniciál nepatří. */
+const TITULY = /\b(Ing|Mgr|Bc|JUDr|MUDr|MVDr|PhDr|RNDr|PaedDr|MgA|MSc|msc|MBA|LLM|Dr|prof|doc|arch|Ph\.?D|CSc|DrSc|FEng|DiS|Th\.?D)\b\.?/gi;
+
+/**
+ * „Jaroslav Minařík" → „J. M.", „JUDr. Ivan Hrůza" → „I. H.",
+ * „Nejedlá Kateřina, Ing." → „N. K." (pořadí jména se nemění, jen se zkracuje).
+ */
+export function inicialy(jmeno) {
+  const casti = castiJmena(jmeno);
+  if (!casti.length) return null;
+  return casti.map((c) => `${[...c][0].toUpperCase()}.`).join(' ');
+}
+
+/**
+ * Části jména bez titulů a interpunkce.
+ * Jednopísmenné zbytky se zahazují — vznikají z titulů psaných bez teček
+ * („M.A Mikuláš Roubíček"), ne ze jména.
+ */
+function castiJmena(jmeno) {
+  return (jmeno ?? '')
+    .replace(TITULY, ' ')
+    .replace(/[.,;()]/g, ' ')
+    .split(/\s+/)
+    .filter((c) => /^\p{L}/u.test(c) && [...c].length > 1);
+}
+
+/**
+ * Klíč pro porovnávání jmen bez ohledu na tituly a pořadí.
+ * „Mgr. Ondřej Chrást", „Ondřej Chrást" i „Chrást Ondřej" dají totéž.
+ */
+export const klicJmena = (jmeno) => castiJmena(jmeno)
+  .map((c) => c.toLowerCase()).sort().join(' ');
+
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Vyškrtá jméno z textu přepisu a nahradí ho iniciálami.
+ *
+ * Postup má dva kroky, protože každý řeší jinou past:
+ *   1. celé jméno v obou pořadích — díky tomu se nahradí i křestní jméno,
+ *      které samo o sobě nahradit nejde (jmenuje se tak i někdo z radních);
+ *   2. samostatně stojící příjmení, včetně českého skloňování („Minaříkovi").
+ *      Koncovky se připouštějí až od pěti písmen; u kratších by se do shody
+ *      dostala cizí jména se stejným začátkem.
+ *
+ * `chranit` jsou jména, která se sama o sobě nahrazovat nesmějí — jinak by se
+ * z odpovídajícího radního Jana Laciny stalo „J. L.".
+ */
+export function zanonymizuj(text, jmeno, chranit = []) {
+  const casti = castiJmena(jmeno);
+  if (!text || !casti.length) return text;
+  const zkratka = inicialy(jmeno);
+  let out = text;
+
+  if (casti.length > 1) {
+    for (const poradi of [casti, [...casti].reverse()]) {
+      out = out.replace(
+        new RegExp(`(?<!\\p{L})${poradi.map(escRe).join('\\s+')}\\.?(?!\\p{L})`, 'gu'),
+        zkratka);
+    }
+  }
+
+  const zakazane = new Set(chranit.flatMap(castiJmena).map((c) => c.toLowerCase()));
+  for (const c of casti) {
+    if ([...c].length < 3 || zakazane.has(c.toLowerCase())) continue;
+    const koncovka = [...c].length >= 5 ? '\\p{L}{0,3}' : '';
+    out = out.replace(
+      new RegExp(`(?<!\\p{L})${escRe(c)}${koncovka}\\.?(?!\\p{L})`, 'gu'),
+      `${[...c][0].toUpperCase()}.`);
+  }
+  return out;
+}
+
 /** „2024-02-26 00:00:00" i „2024-02-26" → „2024-02-26" */
 const den = (s) => (/^\d{4}-\d{2}-\d{2}/.exec(s ?? '')?.[0] ?? null);
 
@@ -54,8 +139,9 @@ const odpovida = (p) => (Array.isArray(p.responder_names) && p.responder_names.l
  * zvlášť, protože celý dataset má přes deset megabajtů a do prohlížeče
  * nemá co dělat.
  */
-export function prehled(p) {
+export function prehled(p, verejni = new Set()) {
   const kdo = tazatel(p);
+  const skryt = jeSkryty(kdo, verejni);
   const texty = p.texts ?? [];
   return {
     gid: p.gid,
@@ -64,7 +150,7 @@ export function prehled(p) {
     datum: den(p.date),
     rok: Number(p.year) || (den(p.date) ? Number(den(p.date).slice(0, 4)) : null),
     oblast: p.topic_name && p.topic_name !== 'undefined' ? p.topic_name.trim() : null,
-    tazatel: kdo.jmeno,
+    tazatel: skryt ? inicialy(kdo.jmeno) : kdo.jmeno,
     typ: kdo.typ,
     odpovida: odpovida(p),
     maOdpoved: texty.some(jeOdpoved),
@@ -76,15 +162,35 @@ export function prehled(p) {
   };
 }
 
+/**
+ * Kdo má na webu zůstat pod celým jménem.
+ *
+ * Nestačí se ptát „je to zastupitel?" u jedné interpelace. Portál vede třináct
+ * lidí jednou jako zastupitele a jednou jako občana — kdo interpeloval před
+ * zvolením nebo po skončení mandátu, má u některých záznamů typ „obcan".
+ * Kdyby se rozhodovalo záznam po záznamu, měl by tentýž člověk na webu jednou
+ * celé jméno a jednou iniciály. Veřejnou osobou je proto ten, kdo je jako
+ * zastupitel veden kdekoliv v datech — nebo kdo na interpelace odpovídá.
+ */
+function jeSkryty(kdo, verejni) {
+  if (!ANONYMIZOVAT_OBCANY || kdo.typ !== 'obcan' || !kdo.jmeno) return false;
+  return !verejni.has(klicJmena(kdo.jmeno));
+}
+
 /** Plné znění jedné interpelace — jde do ročního souboru. */
-export function detail(p) {
+export function detail(p, verejni = new Set()) {
+  const kdo = tazatel(p);
+  const skryt = jeSkryty(kdo, verejni) ? kdo.jmeno : null;
+  const chranit = odpovida(p);
+
   return {
     gid: p.gid,
     texty: (p.texts ?? []).map((t) => ({
       druh: jeOdpoved(t) ? 'odpoved' : 'interpelace',
-      kdo: t.questioner_name?.trim() || null,
+      kdo: skryt && t.questioner_name?.trim() === skryt
+        ? inicialy(skryt) : (t.questioner_name?.trim() || null),
       kdy: den(t.questioner_time),
-      text: cistyText(t.text),
+      text: skryt ? zanonymizuj(cistyText(t.text), skryt, chranit) : cistyText(t.text),
     })).filter((t) => t.text),
     prilohy: (p.attachments ?? [])
       .filter((a) => a.valid !== '0' && a.deleted !== '1' && a.download_url)
@@ -100,7 +206,20 @@ export function detail(p) {
 /** Rozdělí odpověď API na přehled a roční balíky plných textů. */
 export function sestav(data) {
   const platne = (data ?? []).filter((p) => p?.gid && p.deleted !== '1' && p.valid !== '0');
-  const items = platne.map(prehled).sort((a, b) =>
+
+  // Nejdřív se zjistí, kdo je veřejná osoba — teprve pak se dá rozhodovat
+  // o jménech. Pořadí je podstatné: rozhoduje celý dataset, ne jeden záznam.
+  const verejni = new Set();
+  for (const p of platne) {
+    for (const t of p.texts ?? []) {
+      if (t.questioner_type === 'zastupitel' && t.questioner_name) {
+        verejni.add(klicJmena(t.questioner_name));
+      }
+    }
+    for (const r of odpovida(p)) verejni.add(klicJmena(r));
+  }
+
+  const items = platne.map((p) => prehled(p, verejni)).sort((a, b) =>
     (b.datum ?? '').localeCompare(a.datum ?? '') || (b.cislo ?? '').localeCompare(a.cislo ?? ''));
 
   const podleRoku = new Map();
@@ -108,7 +227,7 @@ export function sestav(data) {
     const rok = Number(p.year) || Number(den(p.date)?.slice(0, 4));
     if (!rok) continue;
     if (!podleRoku.has(rok)) podleRoku.set(rok, []);
-    podleRoku.get(rok).push(detail(p));
+    podleRoku.get(rok).push(detail(p, verejni));
   }
 
   return { items, podleRoku, souhrn: souhrnInterpelaci(items) };
