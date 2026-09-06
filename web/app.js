@@ -1348,11 +1348,13 @@ const usnPrepinac = (aktivni, pocetInterpelaci) => `
   </div>`;
 
 const POZNAMKA_INTERPELACE = `
-  <p class="poznamka"><strong>Přebráno z portálu radnice.</strong> Jména tazatelů,
-  doslovné přepisy vystoupení i písemné odpovědi zveřejňuje sama radnice na
-  <a href="https://interpelace.praha6.cz/prehled" target="_blank" rel="noopener">interpelace.praha6.cz</a>
-  — tady se jen dají dohromady přes všechny roky, protože portál ukazuje vždy
-  jen jeden. Interpelace bez odpovědi nemusí znamenat, že radnice neodpověděla:
+  <p class="poznamka"><strong>Přebráno z portálu radnice</strong>
+  (<a href="https://interpelace.praha6.cz/prehled" target="_blank" rel="noopener">interpelace.praha6.cz</a>),
+  kde jsou přepisy vystoupení i písemné odpovědi. Tady se jen dávají dohromady
+  přes všechny roky — portál ukazuje vždy jen jeden.
+  <strong>Jména občanů zkracujeme na iniciály</strong>, a to i uvnitř přepisů;
+  zastupitelé a radní zůstávají pod celým jménem, protože vystupují ve veřejné
+  funkci. Interpelace bez odpovědi nemusí znamenat, že radnice neodpověděla:
   odpověď mohla zaznít na místě a do portálu se nedostat.</p>`;
 
 /**
