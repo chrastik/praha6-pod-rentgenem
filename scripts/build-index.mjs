@@ -142,7 +142,7 @@ const manifest = {
   datasety: {},
 };
 for (const name of ['zapisy', 'smlouvy', 'faktury', 'rozpocet', 'deska', 'scitani',
-  'smlouvy-organizace', 'dotace', 'zakazky-prehled']) {
+  'smlouvy-organizace', 'dotace', 'zakazky-prehled', 'interpelace']) {
   const ds = await readDataset(name);
   if (ds) manifest.datasety[name] = { pocet: ds.pocet, aktualizovano: ds.aktualizovano };
 }

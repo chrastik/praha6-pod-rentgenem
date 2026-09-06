@@ -79,6 +79,24 @@ if (!zakazky) {
   }
 }
 
+// Interpelace: portál ukazuje jen aktuální rok, takže dataset za jediný rok
+// je typický příznak toho, že se čte HTML místo API.
+const interpelace = await readDataset('interpelace');
+if (!interpelace) {
+  info('interpelace: zatím nenaplněno');
+} else {
+  const s = interpelace.souhrn ?? {};
+  interpelace.pocet >= 500
+    ? ok(`interpelace: ${interpelace.pocet} za ${s.roky?.length ?? 0} let`)
+    : chyba(`interpelací jen ${interpelace.pocet} — portál jich má přes osm set`);
+  (s.roky?.length ?? 0) >= 5
+    ? ok(`ročníků interpelací: ${s.roky.length}`)
+    : chyba(`interpelace jen za ${s.roky?.length ?? 0} rok(ů) — čte se jen aktuální ročník?`);
+  s.tazatelu > 0
+    ? ok(`různých tazatelů: ${s.tazatelu}`)
+    : chyba('u žádné interpelace není tazatel');
+}
+
 for (const k of kontroly) {
   console.log(`${k.ok === null ? '·' : k.ok ? '✓' : '✗'} ${k.msg}`);
 }
