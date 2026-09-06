@@ -49,8 +49,10 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/
-          git diff --staged --quiet || git commit -m "Smlouvy zřizovaných organizací ($(TZ=Europe/Prague date +%F))"
-          git push || true
+          git diff --staged --quiet && echo "beze změn" && exit 0
+          git commit -m "Smlouvy zřizovaných organizací ($(TZ=Europe/Prague date +%F))"
+          # Bez || true — neúspěšný push nesmí projít jako zelený běh.
+          git push
 
   publikovat:
     needs: organizace

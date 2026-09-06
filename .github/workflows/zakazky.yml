@@ -1,0 +1,64 @@
+name: Veřejné zakázky
+# Stáhne profil zadavatele MČ Praha 6 v E-ZAKu (zakazky.praha6.cz): seznam
+# všech zakázek včetně archivovaných a ke každé detail s účastníky, vybraným
+# dodavatelem a smluvní cenou. Spojení se smlouvami z registru dělá build-index.
+#
+# Ruční spuštění: změnit obsah souboru .zakazky a commitnout.
+# Tlačítko „Run workflow" je na tomhle repozitáři nespolehlivé, commit funguje vždy.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.zakazky'
+      - 'scripts/sync-zakazky.mjs'
+      - 'scripts/lib/ezak.mjs'
+      - 'scripts/lib/zakazky.mjs'
+  schedule:
+    - cron: '40 5 * * 3'   # středa — ať se to nepere s pondělní ani úterní synchronizací
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync
+
+jobs:
+  zakazky:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Testy parseru
+        run: node tests/test-zakazky.mjs
+
+      - name: Profil zadavatele
+        run: node scripts/sync-zakazky.mjs
+
+      - name: Build indexu (spáruje zakázky se smlouvami)
+        if: always()
+        continue-on-error: true
+        run: node scripts/build-index.mjs
+
+      # Commit i při chybě: když selže část detailů, to, co se stáhlo, má zůstat.
+      - name: Commit dat
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet && echo "beze změn" && exit 0
+          git commit -m "Veřejné zakázky ($(TZ=Europe/Prague date +%F))"
+          # Bez || true: tiše neúspěšný push znamená, že se data nikam nedostala
+          # a workflow to přesto ohlásí jako zelené. To se tu už jednou stalo.
+          git push
+
+  publikovat:
+    needs: zakazky
+    if: always()
+    uses: ./.github/workflows/pages.yml
