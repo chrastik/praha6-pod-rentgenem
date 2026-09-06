@@ -20,6 +20,8 @@
     "validate": "node scripts/validate.mjs",
     "test": "node tests/test-organizace.mjs && node tests/test-dotace.mjs && node tests/test-smlouvy.mjs && node tests/test-zakazky.mjs && node tests/test-interpelace.mjs",
     "probe": "node scripts/probe-sources.mjs",
+    "build:web": "rm -rf _site && mkdir -p _site && cp -r web/. _site/ && mkdir -p _site/data && cp -r data/. _site/data/",
+    "test:web": "node tests/web-prochazka.mjs",
     "daily": "npm run sync:usneseni-marbes && npm run sync:deska && npm run sync:smlouvy && npm run merge && npm run index && npm run validate"
   },
   "engines": {
