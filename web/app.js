@@ -129,6 +129,7 @@ const volby = (hodnoty, vybrano) =>
 const routes = {
   '/': domu,
   '/usneseni': usneseni,
+  '/interpelace': interpelace,
   '/finance': finance,
   '/smlouvy': smlouvy,
   '/organizace': organizace,
@@ -150,6 +151,7 @@ async function route() {
   // (+ profily subjektů) — ať zůstane zvýrazněná na všech.
   const proListu = (cesta === '/firmy') ? '/organizace'
     : cesta.startsWith('/dotace') ? '/dotace'
+    : cesta === '/interpelace' ? '/usneseni'
     : (cesta || '/');
   document.querySelectorAll('.hlavicka nav a').forEach((a) => {
     a.toggleAttribute('aria-current', a.getAttribute('href') === `#${proListu}`);
@@ -181,11 +183,13 @@ async function domu() {
       <div><div class="v">${fmtCislo(d['smlouvy-organizace']?.pocet)}</div><div class="k">smluv zřizovaných organizací</div></div>
       <div><div class="v">${fmtCislo(d.dotace?.pocet)}</div><div class="k">dotačních smluv</div></div>
       <div><div class="v">${fmtCislo(d['zakazky-prehled']?.pocet)}</div><div class="k">veřejných zakázek</div></div>
+      <div><div class="v">${fmtCislo(d.interpelace?.pocet)}</div><div class="k">interpelací od roku 2018</div></div>
       <div><div class="v">${fmtCislo(d.deska?.pocet)}</div><div class="k">položek úřední desky</div></div>
     </div>
     <h2>Kde začít</h2>
     <div class="seznam">
       ${odkaz('#/usneseni', 'Usnesení a jednání', 'Rada i zastupitelstvo, filtr podle orgánu, roku a tématu, fulltext v plném znění.')}
+      ${odkaz('#/interpelace', 'Interpelace', 'Na co se zastupitelé a občané ptali na zasedání — plný přepis, odpověď i přílohy, rok po roce.')}
       ${odkaz('#/finance', 'Peníze', 'Položkový rozpočet a jednotlivé faktury z CityVizoru.')}
       ${odkaz('#/smlouvy', 'Registr smluv', 'Smlouvy městské části podle IČO 00063703.')}
       ${odkaz('#/zakazky', 'Veřejné zakázky', 'Co se soutěžilo, kdo vyhrál, za kolik se to podepsalo a jak cenu změnily dodatky.')}
@@ -251,6 +255,8 @@ async function usneseni(params) {
     <p class="podnadpis">${fmtCislo(manifest.usneseni.pocet)} usnesení od
     ${fmtDatum(manifest.usneseni.rozsah?.od)}. Do roku 2022 z archivu webu radnice,
     od roku 2022 z portálu usnesení, kde je plné znění.</p>
+
+    ${usnPrepinac('/usneseni', manifest.datasety?.interpelace?.pocet)}
 
     <form class="filtry" id="filtry">
       <select name="organ" aria-label="Orgán">
@@ -1320,6 +1326,215 @@ function zakazkaDetail(params, ds) {
       ${z.dokumentu ? ` · ${fmtCislo(z.dokumentu)} veřejných dokumentů` : ''}
       ${z.postup ? `<br>Postup zadání: ${esc(z.postup)}` : ''}
       ${z.zakon ? ` · ${esc(z.zakon)}` : ''}
+    </p>`;
+}
+
+// ============================================================= interpelace ===
+// Podsekce usnesení: co se zastupitelé a občané ptali na zasedání a co jim
+// radnice odpověděla. Přehled je jeden lehký soubor, plné znění se dotahuje
+// po ročnících — celý dataset má přes deset megabajtů.
+
+const USN_STRANKY = {
+  '/usneseni': 'Usnesení',
+  '/interpelace': 'Interpelace',
+};
+
+const usnPrepinac = (aktivni, pocetInterpelaci) => `
+  <div class="prepinac" role="tablist">
+    <a href="#/usneseni" role="tab"${aktivni === '/usneseni' ? ' aria-selected="true"' : ''}>
+      Usnesení <span class="cislo">${fmtCislo(manifest.usneseni.pocet)}</span></a>
+    <a href="#/interpelace" role="tab"${aktivni === '/interpelace' ? ' aria-selected="true"' : ''}>
+      Interpelace${pocetInterpelaci != null ? ` <span class="cislo">${fmtCislo(pocetInterpelaci)}</span>` : ''}</a>
+  </div>`;
+
+const POZNAMKA_INTERPELACE = `
+  <p class="poznamka"><strong>Přebráno z portálu radnice.</strong> Jména tazatelů,
+  doslovné přepisy vystoupení i písemné odpovědi zveřejňuje sama radnice na
+  <a href="https://interpelace.praha6.cz/prehled" target="_blank" rel="noopener">interpelace.praha6.cz</a>
+  — tady se jen dají dohromady přes všechny roky, protože portál ukazuje vždy
+  jen jeden. Interpelace bez odpovědi nemusí znamenat, že radnice neodpověděla:
+  odpověď mohla zaznít na místě a do portálu se nedostat.</p>`;
+
+// Tituly za jménem („Ph.D.") už tečku mají; bez tohohle vznikne „Ph.D..".
+const tecka = (s) => (/\.$/.test((s ?? '').trim()) ? '' : '.');
+
+const typStitek = (typ) => typ === 'obcan'
+  ? '<span class="stitek obcan">občan</span>'
+  : typ === 'zastupitel' ? '<span class="stitek zastupitel">zastupitel</span>' : '';
+
+async function nactiInterpelace() {
+  const ds = await nacti('interpelace.json').catch(() => null);
+  return ds?.souhrn ? ds : null;
+}
+
+async function interpelace(params) {
+  const ds = await nactiInterpelace();
+  if (!ds) {
+    app.innerHTML = `<h1>Interpelace</h1>
+      ${usnPrepinac('/interpelace', null)}
+      <p class="prazdno">Interpelace ještě nebyly načteny.</p>`;
+    return;
+  }
+  if (params.get('i')) return interpelaceDetail(params, ds);
+  return interpelaceSeznam(params, ds);
+}
+
+function interpelaceSeznam(params, ds) {
+  const s = ds.souhrn;
+  const roky = s.roky.map((r) => String(r.rok));
+  // Rok je hlavní osa sekce: bez volby se ukazuje ten nejnovější, ne všechno
+  // najednou — osm set záznamů přes devět let nikdo neprochází vcelku.
+  const rok = params.has('rok') ? params.get('rok') : (roky[0] ?? '');
+  const typ = params.get('typ') ?? '';
+  const oblast = params.get('oblast') ?? '';
+  const q = params.get('q') ?? '';
+  const nq = norm(q);
+
+  let vybrane = ds.items;
+  if (rok) vybrane = vybrane.filter((i) => String(i.rok) === rok);
+  if (typ) vybrane = vybrane.filter((i) => i.typ === typ);
+  if (oblast) vybrane = vybrane.filter((i) => i.oblast === oblast);
+  if (nq) {
+    vybrane = vybrane.filter((i) => norm(
+      `${i.nazev ?? ''} ${i.cislo ?? ''} ${i.tazatel ?? ''} ${(i.odpovida ?? []).join(' ')}`).includes(nq));
+  }
+
+  const r = s.roky.find((x) => String(x.rok) === rok);
+  const { s: strana, stran, kus } = vyrez(vybrane, params);
+  const oblastiVRoce = [...new Set(ds.items
+    .filter((i) => !rok || String(i.rok) === rok).map((i) => i.oblast).filter(Boolean))].sort();
+
+  app.innerHTML = `
+    <p class="nadsekce">Zastupitelstvo MČ Praha 6</p>
+    <h1>Interpelace${rok ? ` v roce ${esc(rok)}` : ''}</h1>
+    <p class="podnadsekce">Na co se zastupitelé a občané ptali na zasedání zastupitelstva
+    a co jim radnice odpověděla. U každé je plný přepis vystoupení, písemná odpověď
+    a přílohy tak, jak je zveřejňuje radnice.</p>
+
+    ${usnPrepinac('/interpelace', s.celkem)}
+
+    <div class="roky" role="tablist" aria-label="Rok">
+      <a href="#/interpelace?rok=" role="tab"${!rok ? ' aria-selected="true"' : ''}>Vše
+        <span class="cislo">${fmtCislo(s.celkem)}</span></a>
+      ${s.roky.map((x) => `
+        <a href="#/interpelace?rok=${x.rok}" role="tab"${String(x.rok) === rok ? ' aria-selected="true"' : ''}>${x.rok}
+          <span class="cislo">${fmtCislo(x.pocet)}</span></a>`).join('')}
+    </div>
+
+    <div class="karty">
+      <div><div class="v">${fmtCislo(r ? r.pocet : s.celkem)}</div><div class="k">interpelací</div></div>
+      <div><div class="v">${fmtCislo(r ? r.zastupitele : s.zastupitele)}</div><div class="k">od zastupitelů</div></div>
+      <div><div class="v">${fmtCislo(r ? r.obcane : s.obcane)}</div><div class="k">od občanů</div></div>
+      <div><div class="v">${fmtCislo(r ? r.sOdpovedi : s.sOdpovedi)}</div><div class="k">má v portálu odpověď</div></div>
+    </div>
+
+    ${POZNAMKA_INTERPELACE}
+
+    <form class="filtry" id="filtry">
+      <select name="typ" aria-label="Kdo interpeloval">
+        <option value="">Zastupitelé i občané</option>
+        <option value="zastupitel"${typ === 'zastupitel' ? ' selected' : ''}>Jen zastupitelé</option>
+        <option value="obcan"${typ === 'obcan' ? ' selected' : ''}>Jen občané</option>
+      </select>
+      <select name="oblast" aria-label="Oblast">
+        <option value="">Všechny oblasti</option>
+        ${volby(oblastiVRoce, oblast)}
+      </select>
+      <input type="search" name="q" value="${esc(q)}" placeholder="Téma, tazatel nebo číslo…"
+             aria-label="Hledat v interpelacích">
+      <span class="pocet">${fmtCislo(vybrane.length)} interpelací</span>
+    </form>
+
+    ${seznam(kus, radekInterpelace, 'Žádná interpelace neodpovídá zadání.')}
+    ${strankovani(strana, stran, vybrane.length)}`;
+
+  // Rok se drží i při změně ostatních filtrů — jinak by se přehled po každém
+  // sáhnutí na filtr přepnul zpátky na „vše".
+  zapoj('/interpelace', params, ['rok']);
+  const form = document.getElementById('filtry');
+  if (form && rok) {
+    const skryte = document.createElement('input');
+    skryte.type = 'hidden'; skryte.name = 'rok'; skryte.value = rok;
+    form.appendChild(skryte);
+  }
+}
+
+const radekInterpelace = (i) => `
+  <div class="polozka">
+    <div class="meta">${fmtDatum(i.datum)}</div>
+    <div>
+      <h3><a href="#/interpelace?i=${encodeURIComponent(i.gid)}">${esc(i.nazev ?? i.cislo ?? 'Bez názvu')}</a></h3>
+      <div class="radek">
+        ${i.cislo ? `<span class="stitek kod">${esc(i.cislo)}</span>` : ''}
+        ${i.tazatel ? `<span>${esc(i.tazatel)}</span>` : ''}
+        ${typStitek(i.typ)}
+        ${i.oblast ? `<span class="stitek">${esc(i.oblast)}</span>` : ''}
+        ${i.maOdpoved ? '' : '<span class="stitek odhad">bez odpovědi v portálu</span>'}
+      </div>
+      ${i.odpovida?.length
+        ? `<div class="radek tlumene">Odpovídá: ${esc(i.odpovida.join(', '))}</div>` : ''}
+    </div>
+  </div>`;
+
+async function interpelaceDetail(params, ds) {
+  const gid = params.get('i');
+  const i = ds.items.find((x) => x.gid === gid);
+  if (!i) {
+    app.innerHTML = `<p class="prazdno">Taková interpelace tu není.</p>
+      <p><a href="#/interpelace">← Zpět na interpelace</a></p>`;
+    return;
+  }
+
+  const zpet = `#/interpelace?rok=${i.rok ?? ''}`;
+  const rocnik = await nacti(`interpelace-texty/${i.rok}.json`).catch(() => null);
+  const d = rocnik?.items?.find((x) => x.gid === gid) ?? null;
+
+  const odstavce = (text) => text.split(/\n{2,}/)
+    .map((o) => `<p>${esc(o).replace(/\n/g, '<br>')}</p>`).join('');
+
+  app.innerHTML = `
+    <p class="nadsekce"><a href="${zpet}">Interpelace ${i.rok ?? ''}</a></p>
+    <h1>${esc(i.nazev ?? i.cislo ?? 'Interpelace')}</h1>
+    <div class="radek">
+      ${i.cislo ? `<span class="stitek kod">${esc(i.cislo)}</span>` : ''}
+      ${typStitek(i.typ)}
+      ${i.oblast ? `<span class="stitek">${esc(i.oblast)}</span>` : ''}
+      <span>${fmtDatum(i.datum)}</span>
+    </div>
+    <p class="podnadsekce">
+      ${i.tazatel ? `Podal${i.typ === 'obcan' ? ' občan' : i.typ === 'zastupitel' ? ' zastupitel' : ''}
+        <strong>${esc(i.tazatel)}</strong>${tecka(i.tazatel)}` : ''}
+      ${i.odpovida?.length ? ` Odpovídá <strong>${esc(i.odpovida.join(', '))}</strong>${tecka(i.odpovida.join(', '))}` : ''}
+      ${i.termin ? ` Termín pro odpověď ${fmtDatum(i.termin)}.` : ''}
+    </p>
+
+    ${d?.texty?.length ? d.texty.map((t) => `
+      <div class="rozprava${t.druh === 'odpoved' ? ' odpoved' : ''}">
+        <h2>${t.druh === 'odpoved' ? 'Odpověď' : 'Interpelace'}</h2>
+        <div class="rozprava-meta">${[t.kdo ? esc(t.kdo) : null, t.kdy ? fmtDatum(t.kdy) : null]
+          .filter(Boolean).join(' · ') || '—'}</div>
+        ${odstavce(t.text)}
+      </div>`).join('')
+      : '<p class="prazdno">Plné znění se nepodařilo načíst.</p>'}
+
+    ${!i.maOdpoved ? `<p class="poznamka">V portálu radnice u této interpelace není písemná
+      odpověď. Mohla zaznít ústně na zasedání — pak je součástí přepisu výše.</p>` : ''}
+
+    ${d?.prilohy?.length ? `
+      <h2>Přílohy</h2>
+      <div class="seznam">
+        ${d.prilohy.map((p) => `
+          <div class="polozka"><div class="meta">📎</div><div>
+            <h3><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.nazev)}</a></h3>
+            <div class="radek tlumene">${p.velikost ? `${fmtCislo(Math.round(p.velikost / 1024))} kB` : ''}
+              ${p.mime ? ` · ${esc(p.mime.split('/').pop())}` : ''}</div>
+          </div></div>`).join('')}
+      </div>` : ''}
+
+    <p class="metodika">
+      ${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Interpelace na portálu radnice</a>` : ''}
+      ${i.jednaniUrl ? ` · <a href="${esc(i.jednaniUrl)}" target="_blank" rel="noopener">Jednání zastupitelstva</a>` : ''}
+      ${i.zverejneno ? ` · zveřejněno ${fmtDatum(i.zverejneno)}` : ''}
     </p>`;
 }
 
