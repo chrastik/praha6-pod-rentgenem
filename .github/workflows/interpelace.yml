@@ -1,0 +1,66 @@
+name: Interpelace
+# Stáhne interpelace zastupitelů a občanů z portálu interpelace.praha6.cz.
+# Portál má veřejné API, které vrátí celou historii od roku 2018 v jednom
+# volání — veřejná tabulka na portálu přitom ukazuje vždy jen aktuální rok.
+#
+# Ruční spuštění: změnit obsah souboru .interpelace a commitnout.
+# Tlačítko „Run workflow" je na tomhle repozitáři nespolehlivé, commit funguje vždy.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.interpelace'
+      - 'scripts/sync-interpelace.mjs'
+      - 'scripts/lib/interpelace.mjs'
+  schedule:
+    - cron: '10 6 * * 4'   # čtvrtek — zastupitelstvo zasedá jednou za dva měsíce, stačí to
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync
+
+jobs:
+  interpelace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Testy odvození
+        run: node tests/test-interpelace.mjs
+
+      - name: Interpelace z portálu
+        run: node scripts/sync-interpelace.mjs
+
+      - name: Build indexu
+        if: always()
+        continue-on-error: true
+        run: node scripts/build-index.mjs
+
+      - name: Kontrola dat
+        if: always()
+        continue-on-error: true
+        run: node scripts/validate.mjs
+
+      - name: Commit dat
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet && echo "beze změn" && exit 0
+          git commit -m "Interpelace ($(TZ=Europe/Prague date +%F))"
+          # Bez || true — neúspěšný push nesmí projít jako zelený běh.
+          git push
+
+  publikovat:
+    needs: interpelace
+    if: always()
+    uses: ./.github/workflows/pages.yml
