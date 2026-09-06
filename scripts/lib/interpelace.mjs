@@ -61,14 +61,30 @@ export const klicJmena = (jmeno) => castiJmena(jmeno)
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
+ * Hrubý kmen českého jména pro hledání skloňovaných tvarů.
+ *
+ * Prosté „jméno plus koncovka" nestačí, protože čeština mění i kmen:
+ * Moravec → Moravce (vypadává „e"), Kopoldová → Kopoldovou. Odřízne se proto
+ * koncové „-ec" a koncová samohláska, zbytek se dohledává s koncovkou.
+ * Není to morfologie, jen tolik, aby jméno nezůstalo v textu viset.
+ */
+function kmenJmena(c) {
+  const zn = [...c];
+  if (zn.length >= 6 && /ec$/u.test(c)) return c.slice(0, -2);
+  if (zn.length >= 4 && /[áéěíýa]$/u.test(c)) return c.slice(0, -1);
+  return c;
+}
+
+const sKoncovkou = (c) => `${escRe(kmenJmena(c))}\\p{L}{0,4}`;
+
+/**
  * Vyškrtá jméno z textu přepisu a nahradí ho iniciálami.
  *
- * Postup má dva kroky, protože každý řeší jinou past:
- *   1. celé jméno v obou pořadích — díky tomu se nahradí i křestní jméno,
- *      které samo o sobě nahradit nejde (jmenuje se tak i někdo z radních);
- *   2. samostatně stojící příjmení, včetně českého skloňování („Minaříkovi").
- *      Koncovky se připouštějí až od pěti písmen; u kratších by se do shody
- *      dostala cizí jména se stejným začátkem.
+ * Dva kroky, každý řeší jinou past:
+ *   1. celé jméno v obou pořadích a ve skloňovaných tvarech („Aleše Moravce").
+ *      Jen tady se smí nahradit i křestní jméno — samo o sobě je moc obecné
+ *      a nese ho i někdo z radních;
+ *   2. samostatně stojící příjmení, taky skloňované.
  *
  * `chranit` jsou jména, která se sama o sobě nahrazovat nesmějí — jinak by se
  * z odpovídajícího radního Jana Laciny stalo „J. L.".
@@ -82,20 +98,21 @@ export function zanonymizuj(text, jmeno, chranit = []) {
   if (casti.length > 1) {
     for (const poradi of [casti, [...casti].reverse()]) {
       out = out.replace(
-        new RegExp(`(?<!\\p{L})${poradi.map(escRe).join('\\s+')}\\.?(?!\\p{L})`, 'gu'),
+        new RegExp(`(?<!\\p{L})${poradi.map(sKoncovkou).join('\\s+')}(?!\\p{L})`, 'gu'),
         zkratka);
     }
   }
 
   const zakazane = new Set(chranit.flatMap(castiJmena).map((c) => c.toLowerCase()));
   for (const c of casti) {
-    if ([...c].length < 3 || zakazane.has(c.toLowerCase())) continue;
-    const koncovka = [...c].length >= 5 ? '\\p{L}{0,3}' : '';
+    if ([...kmenJmena(c)].length < 4 || zakazane.has(c.toLowerCase())) continue;
     out = out.replace(
-      new RegExp(`(?<!\\p{L})${escRe(c)}${koncovka}\\.?(?!\\p{L})`, 'gu'),
+      new RegExp(`(?<!\\p{L})${sKoncovkou(c)}(?!\\p{L})`, 'gu'),
       `${[...c][0].toUpperCase()}.`);
   }
-  return out;
+  // „Moravec." → „M.." — tečka iniciály a tečka věty se sejdou. Trojtečka
+  // se nechává na pokoji.
+  return out.replace(/(\p{Lu}\.)\.(?!\.)/gu, '$1');
 }
 
 /** „2024-02-26 00:00:00" i „2024-02-26" → „2024-02-26" */
