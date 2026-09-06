@@ -114,6 +114,16 @@ zkus('dvojtečka na konci věty se slije',
   zanonymizuj('Mluvil Jiří Hoskovec.', 'Jiří Hoskovec'), 'Mluvil J. H.');
 zkus('trojtečka zůstane', zanonymizuj('Řekl to takto... a dost.', 'Jan Novák'),
   'Řekl to takto... a dost.');
+// Přepis a evidence se v drobnostech rozcházejí — chybějící háček, dvojité „n".
+// Uvození řečníka „Pan X Y:" se shodnými iniciálami je pak jediná stopa.
+zkus('řečník uvozený „Pan" se shodnými iniciálami',
+  zanonymizuj('Pan Ivo Kurfürst: Dobrý den.', 'Ivo Kurfurst'), 'Pan I. K.: Dobrý den.');
+zkus('jméno bez uvození se nechá být',
+  zanonymizuj('zpracoval Pavel Hnilička Architects s.r.o.', 'Petr Horák'),
+  'zpracoval Pavel Hnilička Architects s.r.o.');
+zkus('řečník, který je radní, zůstane celý',
+  zanonymizuj('Pan Jakub Stárek: Děkuji.', 'Petr Sokol', ['Mgr. Jakub Stárek']),
+  'Pan Jakub Stárek: Děkuji.');
 zkus('jméno radního zůstane',
   zanonymizuj('Lacina odpověděl.', 'Jan Lejčko', ['Mgr. Jan Lacina']), 'Lacina odpověděl.');
 zkus('klíč jména nezáleží na titulu ani pořadí',
