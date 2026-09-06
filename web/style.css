@@ -256,7 +256,7 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
 
 /* Peněžní hodnota v dlaždici je delší než počet — bez zmenšení se zalomí
    tak, že se „Kč" ocitne na druhém řádku. */
-.karty .v.dlouha{font-size:1.28rem;letter-spacing:-.01em}
+.karty .v.dlouha{font-size:1.1rem;letter-spacing:-.01em;white-space:nowrap}
 .osa-krok.duplikat{opacity:.6}
 .osa-krok.duplikat .osa-castka{text-decoration:line-through;font-weight:400}
 

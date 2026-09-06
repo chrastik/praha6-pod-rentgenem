@@ -1076,8 +1076,8 @@ const POZNAMKA_ZAKAZKY = `
   je předpokládaná hodnota, vybraný dodavatel a smluvní cena při podpisu.
   Z registru smluv je to, co s cenou udělaly dodatky. Registr ale nerozlišuje, jestli
   dodatek uvádí novou <em>celkovou</em> cenu, nebo jen <em>přírůstek</em> — u části zakázek
-  to poznat nejde a ty pak konečnou cenu nemají. Skutečně uhrazená cena je pole
-  na profilu, které radnice u většiny zakázek nechává vyplněné nulami.</p>`;
+  to poznat nejde a ty pak konečnou cenu nemají. Kolik se nakonec opravdu zaplatilo,
+  má profil vlastní pole — radnice ho vyplňuje jen u malé části zakázek.</p>`;
 
 /** Odznak se změnou ceny po dodatcích. */
 function odznakZmeny(z) {
@@ -1116,6 +1116,7 @@ function zakazkySeznam(params, ds) {
   if (stav === 'zadane') vybrane = vybrane.filter((z) => fazeTrida(z.faze) === ' zadana');
   if (stav === 'zrusene') vybrane = vybrane.filter((z) => fazeTrida(z.faze) === ' zrusena');
   if (stav === 'zdrazene') vybrane = vybrane.filter((z) => z.zmena > 0.005);
+  if (stav === 'nadodhad') vybrane = vybrane.filter((z) => z.zmenaProtiPredpokladu > 0.005);
   if (stav === 'nesparovane') vybrane = vybrane.filter((z) => z.smluv === 0);
   if (nq) {
     vybrane = vybrane.filter((z) =>
@@ -1127,6 +1128,7 @@ function zakazkySeznam(params, ds) {
   const roky = [...new Set(ds.items.map((z) => z.zahajeni?.slice(0, 4)).filter(Boolean))].sort((a, b) => b.localeCompare(a));
   const rezimy = [...new Set(ds.items.map((z) => z.rezim).filter(Boolean))].sort();
   const d = s.dodatky;
+  const o = s.odhad ?? { zakazek: 0 };
 
   app.innerHTML = `
     <p class="nadsekce">Profil zadavatele · registr smluv</p>
@@ -1139,6 +1141,8 @@ function zakazkySeznam(params, ds) {
       <div><div class="v">${fmtCislo(s.celkem)}</div><div class="k">zakázek na profilu</div></div>
       <div><div class="v">${fmtCislo(s.zadanych)}</div><div class="k">zadaných</div></div>
       <div><div class="v dlouha">${fmtKc(s.smluvniCena)}</div><div class="k">smluvní cena ${fmtCislo(s.sCenou)} zakázek</div></div>
+      ${o.zakazek ? `<div><div class="v">${o.zmena > 0 ? '+' : ''}${Math.round(o.zmena * 100)} %</div>
+        <div class="k">proti předpokládané hodnotě u ${fmtCislo(o.zakazek)} zakázek</div></div>` : ''}
       ${d.zakazek ? `<div><div class="v">${d.zmena > 0 ? '+' : ''}${Math.round(d.zmena * 100)} %</div>
         <div class="k">změna ceny u ${fmtCislo(d.zakazek)} zakázek s dodatky</div></div>` : ''}
     </div>
@@ -1150,6 +1154,11 @@ function zakazkySeznam(params, ds) {
     u ${fmtCislo(s.sPredpokladem)} z nich, nabídkové ceny neúspěšných uchazečů
     u ${fmtCislo(s.sNabidkami)} a skutečně uhrazenou cenu u ${fmtCislo(s.uhrazenoVyplneno)}
     z ${fmtCislo(s.uhrazenoTabulka)}, které pro ni mají na profilu připravenou tabulku.</p>
+
+    ${o.zakazek ? `<p class="pod">U ${fmtCislo(o.zakazek)} zakázek radnice uvedla předpokládanou
+      hodnotu i výslednou smluvní cenu: čekala ${fmtKc(o.predpoklad)}, podepsala
+      ${fmtKc(o.vysoutezeno)}. Soutěž srazila cenu u ${fmtCislo(o.levneji)} z nich,
+      u ${fmtCislo(o.drazeji)} vyšla dráž, než se čekalo.</p>` : ''}
 
     ${d.zakazek ? `<p class="pod">Zakázky, u kterých jde cenu porovnat, se podepsaly za
       <strong>${fmtKc(d.zaklad)}</strong> a po dodatcích stojí <strong>${fmtKc(d.konecna)}</strong>
@@ -1172,7 +1181,8 @@ function zakazkySeznam(params, ds) {
         <option value="">Všechny zakázky</option>
         <option value="zadane"${stav === 'zadane' ? ' selected' : ''}>Jen zadané</option>
         <option value="zrusene"${stav === 'zrusene' ? ' selected' : ''}>Jen zrušené</option>
-        <option value="zdrazene"${stav === 'zdrazene' ? ' selected' : ''}>Jen ty, které podražily</option>
+        <option value="zdrazene"${stav === 'zdrazene' ? ' selected' : ''}>Jen ty, které podražily dodatky</option>
+        <option value="nadodhad"${stav === 'nadodhad' ? ' selected' : ''}>Jen ty dražší, než se čekalo</option>
         <option value="nesparovane"${stav === 'nesparovane' ? ' selected' : ''}>Bez smlouvy v registru</option>
       </select>
       <input type="search" name="q" value="${esc(q)}" placeholder="Název, číslo nebo dodavatel…"
@@ -1223,12 +1233,17 @@ function zakazkaDetail(params, ds) {
       ${z.rezim ? `<span class="stitek">${esc(z.rezim)}</span>` : ''}
       ${z.druh ? `<span class="stitek">${esc(z.druh)}</span>` : ''}
       ${z.archiv ? '<span class="stitek">v archivu</span>' : ''}
+      ${z.zmenaProtiPredpokladu != null && Math.abs(z.zmenaProtiPredpokladu) >= 0.005
+        ? `<span class="stitek ${z.zmenaProtiPredpokladu > 0 ? 'rust' : 'pokles'}"
+             title="Předpokládaná hodnota ${fmtKc(z.predpokladPouzitelny)} → smluvní cena ${fmtKc(z.cenaProfil)}">${
+             z.zmenaProtiPredpokladu > 0 ? '+' : ''}${Math.round(z.zmenaProtiPredpokladu * 100)} % proti předpokladu</span>` : ''}
     </div>
     ${z.popis ? `<p class="podnadsekce">${esc(z.popis)}</p>` : ''}
 
     <div class="karty">
       <div><div class="v dlouha">${z.predpokladanaHodnota != null ? fmtKc(z.predpokladanaHodnota) : '—'}</div>
-        <div class="k">předpokládaná hodnota</div></div>
+        <div class="k">předpokládaná hodnota${z.predpokladanaHodnota != null && !z.predpokladPouzitelny
+          ? ' <span title="Zjevně nejde o odhad ceny; do žádného srovnání se nepočítá">(zjevně nesmysl)</span>' : ''}</div></div>
       <div><div class="v dlouha">${z.cenaProfil != null ? fmtKc(z.cenaProfil) : '—'}</div>
         <div class="k">smluvní cena při podpisu</div></div>
       <div><div class="v dlouha">${z.konecna != null ? fmtKc(z.konecna) : '—'}</div>
