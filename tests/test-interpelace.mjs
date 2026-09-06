@@ -101,6 +101,19 @@ zkus('skloňované příjmení taky',
 zkus('sdílené křestní jméno se nahradí jen jako součást celého jména',
   zanonymizuj('Odpovídá Jan Lacina, ptal se Jan Lejčko.', 'Jan Lejčko', ['Mgr. Jan Lacina']),
   'Odpovídá Jan Lacina, ptal se J. L.');
+// Čeština mění i kmen, ne jen koncovku — po prvním nasazení zůstalo v přepisech
+// šestnáct tvarů jako „Aleše Moravce" nebo „Bedřišku Kopoldovou".
+zkus('vypadávající „e" v příjmení',
+  zanonymizuj('Aleše Moravce jsme slyšeli.', 'Ing. Aleš Moravec'), 'A. M. jsme slyšeli.');
+zkus('přechýlené příjmení ve 4. pádě',
+  zanonymizuj('Bedřišku Kopoldovou jsme vyslechli.', 'Bedřiška Kopoldová'), 'B. K. jsme vyslechli.');
+zkus('krátké křestní jméno se skloňuje jen v celém jménu',
+  zanonymizuj('Anny Lochmanové se to týká.', 'Anna Lochmanová'), 'A. L. se to týká.');
+// Tečka iniciály slouží i jako tečka věty; „M.." je překlep, „..." se nesmí zkrátit.
+zkus('dvojtečka na konci věty se slije',
+  zanonymizuj('Mluvil Jiří Hoskovec.', 'Jiří Hoskovec'), 'Mluvil J. H.');
+zkus('trojtečka zůstane', zanonymizuj('Řekl to takto... a dost.', 'Jan Novák'),
+  'Řekl to takto... a dost.');
 zkus('jméno radního zůstane',
   zanonymizuj('Lacina odpověděl.', 'Jan Lejčko', ['Mgr. Jan Lacina']), 'Lacina odpověděl.');
 zkus('klíč jména nezáleží na titulu ani pořadí',
