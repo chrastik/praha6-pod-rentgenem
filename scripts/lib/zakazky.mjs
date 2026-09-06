@@ -19,6 +19,15 @@
 /** Dodatek pod tímto podílem původní ceny je čten jako přírůstek, ne jako nová celková cena. */
 export const PRAH_PRIRUSTKU = 0.5;
 
+/**
+ * Předpokládaná hodnota pod touto hranicí se nebere jako odhad ceny.
+ * Zakázka P/4/2020 má na profilu vyplněno „1 Kč bez DPH" a vysoutěžila se
+ * za 467 500 Kč; poměr obou čísel by dal „+46 749 900 %" a zničil by každý
+ * souhrn, do kterého by se dostal. Není to naše chyba ve čtení — na profilu
+ * to tak opravdu je.
+ */
+export const PRAH_PREDPOKLADU = 10000;
+
 const bezDiakritiky = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
@@ -137,8 +146,15 @@ export function sparuj(zakazky, smlouvy) {
       ? z.uhrazeno.reduce((a, u) => a + (u.bezDph ?? 0), 0)
       : null;
 
+    const predpoklad = z.predpokladanaHodnota >= PRAH_PREDPOKLADU ? z.predpokladanaHodnota : null;
+
     return {
       ...z,
+      // Vyplněná, ale nesmyslně nízká hodnota se schová, aby nešla do součtů;
+      // původní údaj zůstává v `predpokladanaHodnota`, ať je vidět, co profil uvádí.
+      predpokladPouzitelny: predpoklad,
+      zmenaProtiPredpokladu: predpoklad && dodavatel?.cenaBezDph > 0
+        ? dodavatel.cenaBezDph / predpoklad - 1 : null,
       smluv: sml.length,
       smlouvy: osa.kroky,
       zaklad: osa.zaklad,
@@ -177,6 +193,10 @@ export function souhrnZakazek(items) {
   const zaklad = porovnatelne.reduce((a, z) => a + z.zaklad, 0);
   const konecna = porovnatelne.reduce((a, z) => a + z.konecna, 0);
 
+  const sPredpokladem = items.filter((z) => z.predpokladPouzitelny && z.cenaProfil > 0);
+  const predpoklad = sPredpokladem.reduce((a, z) => a + z.predpokladPouzitelny, 0);
+  const vysoutezeno = sPredpokladem.reduce((a, z) => a + z.cenaProfil, 0);
+
   const roky = {};
   for (const z of items) {
     const r = z.zahajeni?.slice(0, 4);
@@ -207,6 +227,15 @@ export function souhrnZakazek(items) {
       zmena: zaklad ? konecna / zaklad - 1 : null,
       podrazilo: porovnatelne.filter((z) => z.konecna > z.zaklad).length,
       zlevnilo: porovnatelne.filter((z) => z.konecna < z.zaklad).length,
+    },
+    // Kolik se ušetřilo (nebo přeplatilo) proti tomu, co radnice čekala.
+    odhad: {
+      zakazek: sPredpokladem.length,
+      predpoklad: Math.round(predpoklad),
+      vysoutezeno: Math.round(vysoutezeno),
+      zmena: predpoklad ? vysoutezeno / predpoklad - 1 : null,
+      levneji: sPredpokladem.filter((z) => z.cenaProfil < z.predpokladPouzitelny).length,
+      drazeji: sPredpokladem.filter((z) => z.cenaProfil > z.predpokladPouzitelny).length,
     },
     roky: Object.values(roky).sort((a, b) => b.rok.localeCompare(a.rok)),
   };

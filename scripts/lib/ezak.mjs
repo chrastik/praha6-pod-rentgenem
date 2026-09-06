@@ -220,7 +220,9 @@ export function parseDetail(html, dbid) {
     // Profil používá obě znění podle typu řízení.
     postup: zaPopiskem(t, 'Postup') ?? zaPopiskem(t, 'Druh řízení'),
     zakon: zaPopiskem(t, 'Dle zákona'),
-    popis: /Stručný popis předmětu:\s*\|?\s*([^|]{3,600})/i.exec(t)?.[1]?.trim() || null,
+    // Popis bývá i na dvacet řádků; useknutí na pár set znaků skončí uprostřed
+    // slova a na webu to vypadá jako chyba. Bere se celý až po další oddělovač.
+    popis: /Stručný popis předmětu:\s*\|?\s*([^|]{3,4000})/i.exec(t)?.[1]?.trim() || null,
     zahajeni: datum(zaPopiskem(t, 'Datum zahájení')),
     lhuta: datum(zaPopiskem(t, 'Nabídku podat do')),
     predpokladanaHodnota: castka(zaPopiskem(t, 'Předpokládaná hodnota')),
