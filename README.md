@@ -88,15 +88,22 @@ cp -r data web/data && (cd web && python3 -m http.server 8000)
 Web se publikuje přes GitHub Pages workflow `pages.yml` — poskládá `web/` a `data/`
 do jedné složky a nasadí ji. Žádný externí hosting není potřeba.
 
-Vlastní subdoména:
+Vlastní doména `praha6podrentgenem.cz`:
 
 1. **Settings → Pages → Source: GitHub Actions**
-2. **Settings → Pages → Custom domain:** `praha6podrentgenem.chrast.eu` → Save
-3. U správce DNS domény `chrast.eu` přidej záznam:
-   `praha6podrentgenem` **CNAME** → `<uzivatelske-jmeno>.github.io.`
-4. Až se DNS rozšíří (minuty až hodiny), zaškrtni **Enforce HTTPS**.
+2. **Settings → Pages → Custom domain:** `praha6podrentgenem.cz` → Save
+3. U správce DNS domény (Active24) nastav:
+   - kořen `praha6podrentgenem.cz` — **A** na `185.199.108.153`, `185.199.109.153`,
+     `185.199.110.153`, `185.199.111.153`
+   - kořen `praha6podrentgenem.cz` — **AAAA** na `2606:50c0:8000::153`,
+     `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153`
+   - `www` — **CNAME** na `chrastik.github.io.`
+   MX a SPF záznamy zůstávají beze změny, e-mail na doméně tím není dotčen.
+4. Až se DNS rozšíří (minuty až hodiny) a GitHub vystaví certifikát,
+   zaškrtni **Enforce HTTPS**.
 
-WordPress na `chrast.eu` se tím nijak nedotkne — subdoména běží úplně vedle.
+Původní adresa `praha6podrentgenem.chrast.eu` slouží už jen jako přesměrování
+na novou doménu.
 
 ## Licence
 
