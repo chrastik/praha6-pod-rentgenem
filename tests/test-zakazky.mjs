@@ -144,6 +144,20 @@ zkus('agregovaná změna +18 %', Math.round(v.souhrn.dodatky.zmena * 100), 18);
 zkus('nulami vyplněná tabulka se nepočítá jako zveřejněná cena', v.souhrn.uhrazenoVyplneno, 0);
 zkus('ale eviduje se, že tabulka existuje', v.souhrn.uhrazenoTabulka, 1);
 zkus('cena z profilu sedí se smlouvou, takže žádný rozpor', v.items[0].rozporSProfilem, false);
+// P/4/2020 má na profilu „předpokládaná hodnota 1 Kč" a vysoutěžila se za 467 500 Kč.
+const nesmysl = sparuj([
+  { dbid: 9, kod: null, nazev: 'S jedničkou', faze: 'Zadáno', url: 'z', zahajeni: '2020-01-01',
+    predpokladanaHodnota: 1, dodavatele: [{ nazev: 'F', ico: '99999999', cenaBezDph: 467500 }],
+    ucastnici: [], uhrazeno: [] },
+  { dbid: 10, kod: null, nazev: 'S rozumným odhadem', faze: 'Zadáno', url: 'z', zahajeni: '2020-01-01',
+    predpokladanaHodnota: 500000, dodavatele: [{ nazev: 'G', ico: '88888888', cenaBezDph: 400000 }],
+    ucastnici: [], uhrazeno: [] },
+], []);
+zkus('nesmyslný odhad 1 Kč nejde do porovnání', nesmysl.souhrn.odhad.zakazek, 1);
+zkus('a nezkreslí souhrn', Math.round(nesmysl.souhrn.odhad.zmena * 100), -20);
+zkus('ale zůstane vidět, co profil uvádí', nesmysl.items[0].predpokladanaHodnota, 1);
+zkus('vysoutěženo levněji než odhad', nesmysl.souhrn.odhad.levneji, 1);
+
 zkus('zdravý dataset projde kontrolou', zkontroluj(v).length, 0);
 zkus('prázdný dataset se pozná', zkontroluj({ items: [], souhrn: {} }).length > 0, true);
 
