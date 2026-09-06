@@ -110,6 +110,14 @@ export function zanonymizuj(text, jmeno, chranit = []) {
       new RegExp(`(?<!\\p{L})${sKoncovkou(c)}(?!\\p{L})`, 'gu'),
       `${[...c][0].toUpperCase()}.`);
   }
+  // Přepis uvozuje řečníka „Pan Ivo Kurfürst:". Když se iniciály shodují
+  // s tazatelem, je to on — i když se jméno v datech portálu píše o chlup jinak
+  // (chybějící háček, dvojité „n"), takže shoda podle písmen selže.
+  out = out.replace(
+    /(?<=\b[Pp]an[ií]?\s+)\p{Lu}\p{L}+(?:\s+\p{Lu}\p{L}+){1,2}(?=\s*:)/gu,
+    (m) => (inicialy(m) === zkratka && !castiJmena(m).some((c) => zakazane.has(c.toLowerCase()))
+      ? zkratka : m));
+
   // „Moravec." → „M.." — tečka iniciály a tečka věty se sejdou. Trojtečka
   // se nechává na pokoji.
   return out.replace(/(\p{Lu}\.)\.(?!\.)/gu, '$1');
