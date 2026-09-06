@@ -91,7 +91,10 @@ function seznam(kus, radek, prazdno = 'Nic neodpovídá zadání.') {
 function zapoj(cesta, params, zachovat = []) {
   const naFiltr = (form) => {
     const p = new URLSearchParams();
-    for (const k of zachovat) if (params.get(k)) p.set(k, params.get(k));
+    // `has`, ne `get`: prázdná hodnota je taky volba. U interpelací znamená
+    // `rok=` výslovné „Vše"; kdyby se zahodila, stránka by po každém hledání
+    // spadla zpátky na výchozí poslední ročník.
+    for (const k of zachovat) if (params.has(k)) p.set(k, params.get(k) ?? '');
     for (const [k, v] of new FormData(form)) if (String(v).trim()) p.set(k, String(v).trim());
     p.delete('strana');
     location.hash = `#${cesta}?${p}`;
@@ -122,8 +125,18 @@ function zapoj(cesta, params, zachovat = []) {
 const rokyZ = (polozky, klic = 'datum') =>
   [...new Set(polozky.map((p) => (p[klic] ?? '').slice(0, 4)).filter(Boolean))].sort().reverse();
 
-const volby = (hodnoty, vybrano) =>
-  hodnoty.map((h) => `<option${String(h) === String(vybrano) ? ' selected' : ''}>${esc(h)}</option>`).join('');
+/**
+ * Položky výběru. Když je v adrese hodnota, kterou nabídka neobsahuje —
+ * třeba oblast, která v právě zvoleném roce není — doplní se.
+ * Bez toho se výběr přepne na „Všechny…", ale filtr dál platí, takže
+ * uživatel kouká na prázdný seznam a nikde není vidět proč.
+ */
+const volby = (hodnoty, vybrano) => {
+  const seznam = [...hodnoty];
+  if (vybrano && !seznam.some((h) => String(h) === String(vybrano))) seznam.unshift(vybrano);
+  return seznam.map((h) =>
+    `<option${String(h) === String(vybrano) ? ' selected' : ''}>${esc(h)}</option>`).join('');
+};
 
 // ================================================================== router ===
 const routes = {
@@ -1465,15 +1478,8 @@ function interpelaceSeznam(params, ds) {
     ${seznam(kus, radekInterpelace, 'Žádná interpelace neodpovídá zadání.')}
     ${strankovani(strana, stran, vybrane.length)}`;
 
-  // Rok se drží i při změně ostatních filtrů — jinak by se přehled po každém
-  // sáhnutí na filtr přepnul zpátky na „vše".
+  // Rok drží `zapoj` napříč změnami ostatních filtrů i hledáním.
   zapoj('/interpelace', params, ['rok']);
-  const form = document.getElementById('filtry');
-  if (form && rok) {
-    const skryte = document.createElement('input');
-    skryte.type = 'hidden'; skryte.name = 'rok'; skryte.value = rok;
-    form.appendChild(skryte);
-  }
 }
 
 const radekInterpelace = (i) => `
