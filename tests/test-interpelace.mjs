@@ -5,7 +5,9 @@
  * nekonzistentní (chybějící typ tazatele, „undefined" místo oblasti,
  * náhodný identifikátor typu textu).
  */
-import { prehled, detail, sestav, zkontroluj } from '../scripts/lib/interpelace.mjs';
+import {
+  prehled, detail, sestav, zkontroluj, inicialy, zanonymizuj, klicJmena,
+} from '../scripts/lib/interpelace.mjs';
 
 let ok = true;
 const zkus = (popis, skut, ocek) => {
@@ -53,8 +55,13 @@ const p = prehled(zaznam());
 zkus('číslo a název', [p.cislo, p.nazev], ['Z10/001/2024', 'Veřejný prostor']);
 zkus('datum bez času', p.datum, '2024-02-26');
 zkus('rok jako číslo', p.rok, 2024);
-zkus('tazatel z textu interpelace, ne z odpovědi', p.tazatel, 'Jaroslav Minařík');
+// Jméno občana se na webu zkracuje; zastupitel zůstává pod celým jménem.
+zkus('občan dostane iniciály', p.tazatel, 'J. M.');
 zkus('typ tazatele', p.typ, 'obcan');
+zkus('zastupitel si celé jméno ponechá', prehled(zaznam({
+  texts: [{ questioner_name: 'Ing. Eva Tichá', questioner_type: 'zastupitel',
+    text: 'Dotaz.', type_name: 'Text interpelace' }],
+})).tazatel, 'Ing. Eva Tichá');
 zkus('odpovídající', p.odpovida, ['Štěpán Barták']);
 zkus('odpověď se pozná podle popisku typu', p.maOdpoved, true);
 zkus('smazaná příloha se nepočítá', p.priloh, 1);
@@ -80,9 +87,29 @@ zkus('prázdné responder_names spadne zpět na jedno jméno', prehled(zaznam({
   responder_names: [], responder_name: 'Jediný',
 })).odpovida, ['Jediný']);
 
+console.log('\nZkracování jmen občanů');
+zkus('iniciály bez titulů', inicialy('JUDr. Ivan Hrůza'), 'I. H.');
+zkus('příjmení napřed se nepřehazuje', inicialy('Nejedlá Kateřina, Ing.'), 'N. K.');
+// „M.A" je titul psaný bez teček; jednopísmenné zbytky do iniciál nepatří.
+zkus('titul bez teček nepřidá písmeno', inicialy('M.A Mikuláš Roubíček'), 'M. R.');
+zkus('celé jméno v přepisu zmizí',
+  zanonymizuj('Pan Jaroslav Minařík řekl.', 'Jaroslav Minařík'), 'Pan J. M. řekl.');
+// Přepisy jsou psané česky, jméno se v nich skloňuje.
+zkus('skloňované příjmení taky',
+  zanonymizuj('Minaříkovi to vadí.', 'Jaroslav Minařík'), 'M. to vadí.');
+// Křestní jméno sdílené s radním nesmí zmizet samo o sobě, ale v celém jménu ano.
+zkus('sdílené křestní jméno se nahradí jen jako součást celého jména',
+  zanonymizuj('Odpovídá Jan Lacina, ptal se Jan Lejčko.', 'Jan Lejčko', ['Mgr. Jan Lacina']),
+  'Odpovídá Jan Lacina, ptal se J. L.');
+zkus('jméno radního zůstane',
+  zanonymizuj('Lacina odpověděl.', 'Jan Lejčko', ['Mgr. Jan Lacina']), 'Lacina odpověděl.');
+zkus('klíč jména nezáleží na titulu ani pořadí',
+  klicJmena('Mgr. Ondřej Chrást') === klicJmena('Chrást Ondřej'), true);
+
 console.log('\nPlné znění');
 const d = detail(zaznam());
 zkus('dva texty: interpelace a odpověď', d.texty.map((t) => t.druh), ['interpelace', 'odpoved']);
+zkus('podpis občana u textu je zkrácený', d.texty[0].kdo, 'J. M.');
 zkus('windows konce řádků a trojité mezery se srovnají',
   d.texty[0].text, 'Text interpelace\n\no lavičkách.');
 zkus('příloha dostane absolutní URL',
@@ -108,6 +135,23 @@ zkus('souhrn: zastupitelé vs. občané',
   [v.souhrn.zastupitele, v.souhrn.obcane], [1, 2]);
 zkus('souhrn po letech', v.souhrn.roky.map((r) => [r.rok, r.pocet]), [[2025, 2], [2024, 1]]);
 zkus('bez odpovědi se počítá', v.souhrn.bezOdpovedi, 1);
+
+console.log('\nTýž člověk jednou jako zastupitel, jednou jako občan');
+// Portál takhle vede třináct lidí — kdo interpeloval před zvolením nebo po
+// skončení mandátu. Bez pohledu na celý dataset by měl jednou celé jméno
+// a podruhé iniciály.
+const dvojrole = sestav([
+  zaznam({ gid: 'z1', number: 'Z1/001/2023', year: '2023', date: '2023-01-01',
+    texts: [{ questioner_name: 'Mgr. Ondřej Chrást', questioner_type: 'zastupitel',
+      text: 'Jako zastupitel.', type_name: 'Text interpelace' }] }),
+  zaznam({ gid: 'z2', number: 'Z1/002/2019', year: '2019', date: '2019-01-01',
+    texts: [{ questioner_name: 'Ondřej Chrást', questioner_type: 'obcan',
+      text: 'Pan Ondřej Chrást tehdy ještě jako občan.', type_name: 'Text interpelace' }] }),
+]);
+zkus('celé jméno i u záznamu vedeného jako občan',
+  dvojrole.items.map((i) => i.tazatel).sort(), ['Mgr. Ondřej Chrást', 'Ondřej Chrást']);
+zkus('a přepis se nezkracuje',
+  dvojrole.podleRoku.get(2019)[0].texty[0].text, 'Pan Ondřej Chrást tehdy ještě jako občan.');
 
 console.log('\nKontroly datasetu');
 zkus('zdravý dataset projde', zkontroluj(v).length, 0);
