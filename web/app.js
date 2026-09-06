@@ -1355,6 +1355,21 @@ const POZNAMKA_INTERPELACE = `
   jen jeden. Interpelace bez odpovědi nemusí znamenat, že radnice neodpověděla:
   odpověď mohla zaznít na místě a do portálu se nedostat.</p>`;
 
+/**
+ * Typ přílohy pro čtenáře. MIME z portálu je u dokumentů Office nesnesitelný
+ * („vnd.openxmlformats-officedocument.wordprocessingml.document"), takže se
+ * bere přípona z názvu souboru a MIME slouží jen jako záloha.
+ */
+const typPrilohy = (nazev, mime) => {
+  const pripona = /\.([a-z0-9]{1,5})$/i.exec(nazev ?? '')?.[1];
+  if (pripona) return pripona.toUpperCase();
+  const konec = (mime ?? '').split('/').pop() ?? '';
+  return /wordprocessing/.test(konec) ? 'DOCX'
+    : /spreadsheet/.test(konec) ? 'XLSX'
+    : /presentation/.test(konec) ? 'PPTX'
+    : konec ? konec.slice(0, 8).toUpperCase() : '';
+};
+
 // Tituly za jménem („Ph.D.") už tečku mají; bez tohohle vznikne „Ph.D..".
 const tecka = (s) => (/\.$/.test((s ?? '').trim()) ? '' : '.');
 
@@ -1526,8 +1541,10 @@ async function interpelaceDetail(params, ds) {
         ${d.prilohy.map((p) => `
           <div class="polozka"><div class="meta">📎</div><div>
             <h3><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.nazev)}</a></h3>
-            <div class="radek tlumene">${p.velikost ? `${fmtCislo(Math.round(p.velikost / 1024))} kB` : ''}
-              ${p.mime ? ` · ${esc(p.mime.split('/').pop())}` : ''}</div>
+            <div class="radek tlumene">${[
+              typPrilohy(p.nazev, p.mime),
+              p.velikost ? `${fmtCislo(Math.round(p.velikost / 1024))} kB` : null,
+            ].filter(Boolean).map(esc).join(' · ')}</div>
           </div></div>`).join('')}
       </div>` : ''}
 
