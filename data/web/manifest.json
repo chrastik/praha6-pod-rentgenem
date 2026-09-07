@@ -1,5 +1,5 @@
 {
-  "aktualizovano": "2026-09-07T09:40:24.926Z",
+  "aktualizovano": "2026-09-07T09:53:16.547Z",
   "usneseni": {
     "pocet": 27984,
     "roky": [
@@ -49,11 +49,11 @@
     },
     "faktury": {
       "pocet": 18538,
-      "aktualizovano": "2026-09-07T09:40:21.717Z"
+      "aktualizovano": "2026-09-07T09:53:14.362Z"
     },
     "rozpocet": {
       "pocet": 6,
-      "aktualizovano": "2026-09-07T09:40:21.675Z"
+      "aktualizovano": "2026-09-07T09:53:14.309Z"
     },
     "deska": {
       "pocet": 131,
@@ -69,11 +69,11 @@
     },
     "dotace": {
       "pocet": 1353,
-      "aktualizovano": "2026-09-07T09:40:24.818Z"
+      "aktualizovano": "2026-09-07T09:53:16.459Z"
     },
     "zakazky-prehled": {
       "pocet": 470,
-      "aktualizovano": "2026-09-07T09:40:24.920Z"
+      "aktualizovano": "2026-09-07T09:53:16.541Z"
     },
     "interpelace": {
       "pocet": 805,
