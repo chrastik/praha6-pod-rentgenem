@@ -28,10 +28,14 @@ jobs:
       - name: Kontrola čerstvosti zdrojů
         id: kontrola
         run: |
+          # Bez roury: za `node ... | tee` vrací $? kód tee, tedy vždycky nulu,
+          # a hlídač by mlčel i ve chvíli, kdy má křičet.
           set +e
-          node scripts/hlidac-zdroju.mjs | tee vypis.txt
-          echo "spi=$?" >> "$GITHUB_OUTPUT"
+          node scripts/hlidac-zdroju.mjs > vypis.txt
+          KOD=$?
           set -e
+          cat vypis.txt
+          echo "spi=$KOD" >> "$GITHUB_OUTPUT"
           node scripts/hlidac-zdroju.mjs --markdown > telo.md || true
 
       # Jedno issue, ne nové každý týden. Titulek je klíč, podle kterého se hledá.
