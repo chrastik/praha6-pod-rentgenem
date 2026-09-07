@@ -244,6 +244,56 @@ await zkus('neznámá cesta i neznámý detail končí srozumitelně', async () 
   return { ok: /Veřejná data/.test(a) && /není/.test(c) && /není/.test(d), info: '' };
 });
 
+console.log('\nÚplnost dat u faktur');
+await zkus('neúplný ročník je označený v roletce a hodnota zůstane čistý rok', async () => {
+  await jdi('/finance');
+  const volby = await p.$$eval('#filtry select[name=rok] option',
+    (o) => o.map((x) => ({ v: x.value, t: x.innerText })));
+  const znacene = volby.filter((x) => /neúplný/.test(x.t));
+  const cistaHodnota = znacene.every((x) => /^\d{4}$/.test(x.v));
+  return {
+    ok: znacene.length > 0 && cistaHodnota,
+    info: znacene.map((x) => `${x.t} → „${x.v}"`).join(', ') || 'žádný ročník není označený',
+  };
+});
+await zkus('výběr označeného ročníku opravdu filtruje', async () => {
+  await jdi('/finance');
+  const rok = await p.$eval('#filtry select[name=rok] option:nth-child(3)', (e) => e.value);
+  await p.selectOption('#filtry select[name=rok]', rok);
+  await p.waitForTimeout(900);
+  const par = await parametry();
+  const data = await p.$$eval('.seznam .polozka .meta', (e) => e.map((x) => x.innerText));
+  return {
+    ok: par.rok === rok && data.length > 0 && data.every((d) => d.trim().endsWith(rok)),
+    info: `#${await hash()} · ${data.length} položek, všechny z roku ${rok}`,
+  };
+});
+await zkus('poznámka o dírách se ukáže bez filtru', async () => {
+  await jdi('/finance');
+  const t = await p.$eval('.poznamka.varovani', (e) => e.innerText).catch(() => '');
+  return { ok: /nezveřejnil celý|dní stará/.test(t), info: t.split('\n')[0].slice(0, 110) };
+});
+await zkus('u vyfiltrovaného úplného ročníku poznámka nestraší cizím rokem', async () => {
+  await jdi('/finance');
+  const volby = await p.$$eval('#filtry select[name=rok] option',
+    (o) => o.filter((x) => x.value && !/neúplný/.test(x.innerText)).map((x) => x.value));
+  const uplny = volby.find((v) => Number(v) < new Date().getFullYear());
+  if (!uplny) return { ok: true, info: 'není s čím porovnat' };
+  await jdi(`/finance?rok=${uplny}`);
+  const t = await p.$eval('.poznamka.varovani', (e) => e.innerText).catch(() => '');
+  return { ok: !/nezveřejnil celý/.test(t), info: `rok ${uplny}: ${t ? t.split('\n')[0].slice(0, 80) : 'bez poznámky'}` };
+});
+await zkus('u vyfiltrovaného děravého ročníku se poznámka drží jeho', async () => {
+  await jdi('/finance');
+  const dery = await p.$$eval('#filtry select[name=rok] option',
+    (o) => o.filter((x) => /neúplný/.test(x.innerText)).map((x) => x.value));
+  if (!dery.length) return { ok: true, info: 'žádný děravý ročník' };
+  await jdi(`/finance?rok=${dery[0]}`);
+  const t = await p.$eval('.poznamka.varovani', (e) => e.innerText).catch(() => '');
+  const cizi = dery.slice(1).some((r) => t.includes(`Rok ${r} `));
+  return { ok: t.includes(`Rok ${dery[0]} `) && !cizi, info: t.split('\n')[0].slice(0, 110) };
+});
+
 console.log(vysledky.join('\n'));
 if (chybyKonzole.length) {
   ok = false;
