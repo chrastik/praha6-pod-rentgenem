@@ -55,6 +55,7 @@ npm run sync:finance                # CityVizor
 npm run sync:smlouvy                # denní přírůstek; BACKFILL=1 projde dumpy
 npm run merge && npm run index      # sloučení a fulltextový index
 npm run validate                    # kontrola integrity
+npm run hlidac                      # nepřestal některý zdroj publikovat?
 ```
 
 Náhled webu lokálně:
@@ -82,6 +83,26 @@ cp -r data web/data && (cd web && python3 -m http.server 8000)
 - **Nic se nedopočítává.** Když zdroj hodnotu nemá, je prázdná — ne odhadnutá.
 - **U každého záznamu odkaz na originál.** Web je rozcestník, ne náhrada úřední desky.
 - **Šetrné chování ke zdrojům.** Omezená paralelita, retry s odstupem, inkrementální běh.
+- **Díra ve zdroji se nesmí tvářit jako hotové číslo.** Když zdroj ročník nezveřejnil
+  celý, web to u něj napíše — viz níže.
+
+### Hlídání zdrojů
+
+Scraper umí měsíce běžet zeleně a nevozit nic nového: zdroj prostě přestane publikovat.
+Přesně to potkalo faktury — CityVizor dostal z účetnictví poslední dávku v lednu 2025
+a další až po roce, takže za rok 2025 je zveřejněno 168 faktur místo obvyklých čtyř tisíc
+a chybí zhruba miliarda a půl korun výdajů. Nikde to nespadlo.
+
+Proto dvě pojistky, obě odvozené z dat, nic se nepíše natvrdo:
+
+- `scripts/lib/finance.mjs` spočítá při buildu úplnost každého ročníku faktur
+  (chybějící měsíce, počet proti obvyklému, podíl zveřejněných výdajů k rozpočtu).
+  Neúplný ročník se v sekci Peníze označí v roletce a nad seznamem se vysvětlí proč.
+  Až radnice ročník doplní, poznámka zmizí sama.
+- `scripts/hlidac-zdroju.mjs` porovná u každého datasetu stáří nejnovějšího záznamu
+  s limitem odvozeným od toho, jak často zdroj běžně publikuje. Workflow `hlidac.yml`
+  ho pouští v pondělí a drží o nálezech jedno otevřené issue, které samo zavře,
+  jakmile se zdroje rozjedou.
 
 ## Nasazení
 
