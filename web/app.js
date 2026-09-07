@@ -138,6 +138,22 @@ const volby = (hodnoty, vybrano) => {
     `<option${String(h) === String(vybrano) ? ' selected' : ''}>${esc(h)}</option>`).join('');
 };
 
+/**
+ * Roletka ročníků u faktur. U ročníku, který je ve zdroji děravý, se to píše
+ * rovnou do nabídky — jinak si ho člověk vyfiltruje a nemá jak poznat, že
+ * čísla, na která kouká, nejsou celá.
+ */
+const volbyRoku = (roky, vybrano, pokryti) => {
+  const neuplne = new Set((pokryti?.neuplneRoky ?? []).map(String));
+  const seznam = [...roky];
+  if (vybrano && !seznam.some((h) => String(h) === String(vybrano))) seznam.unshift(vybrano);
+  return seznam.map((h) => {
+    const popisek = neuplne.has(String(h)) ? `${h} — neúplný` : String(h);
+    return `<option value="${esc(h)}"${String(h) === String(vybrano) ? ' selected' : ''}`
+      + `>${esc(popisek)}</option>`;
+  }).join('');
+};
+
 // ================================================================== router ===
 const routes = {
   '/': domu,
@@ -336,6 +352,7 @@ async function finance(params) {
   const soucet = vybrane.reduce((a, f) => a + (f.vydaj ?? 0), 0);
   const { s, stran, kus } = vyrez(vybrane, params);
   const rozsah = faktury?.souhrn?.rozsah ?? {};
+  const pokryti = faktury?.pokryti ?? null;
 
   app.innerHTML = `
     <h1>Peníze</h1>
@@ -346,6 +363,8 @@ async function finance(params) {
       <div><div class="v">${fmtKc(faktury?.souhrn?.celkemVydaje)}</div><div class="k">výdaje celkem</div></div>
       <div><div class="v">${fmtCislo(rozpocet?.roky?.length)}</div><div class="k">ročníků rozpočtu</div></div>
     </div>
+
+    ${poznamkaOPokryti(pokryti, rok)}
 
     <h2>Největší dodavatelé</h2>
     <p class="pod">Podle objemu ve vybraném období.</p>
@@ -360,7 +379,7 @@ async function finance(params) {
     <form class="filtry" id="filtry">
       <select name="rok" aria-label="Rok">
         <option value="">Všechny roky</option>
-        ${volby(rokyZ(vsechny), rok)}
+        ${volbyRoku(rokyZ(vsechny), rok, pokryti)}
       </select>
       <input type="search" name="q" value="${esc(q)}" placeholder="Dodavatel nebo popis…"
              aria-label="Hledat v fakturách">
@@ -371,6 +390,59 @@ async function finance(params) {
     ${strankovani(s, stran, vybrane.length)}`;
 
   zapoj('/finance', params);
+}
+
+/**
+ * Zdroj má díry a web je nesmí zamlčet. Sekce Peníze do téhle chvíle ukazovala
+ * všechna čísla jako hotová, takže kdo si vyfiltroval rok 2025, viděl pár set
+ * faktur a odnesl si, že radnice skoro nic neutratila. Ve skutečnosti CityVizor
+ * za ten rok od konce ledna žádný export z účetnictví nedostal.
+ *
+ * Text se skládá z dat spočítaných při buildu (viz scripts/lib/finance.mjs),
+ * ne z natvrdo napsaných čísel — až radnice ročník doplní, poznámka zmizí sama.
+ */
+const DNI_DO_ZASTARANI = 45;
+
+function poznamkaOPokryti(pokryti, vybranyRok) {
+  if (!pokryti) return '';
+  const roky = pokryti.roky ?? [];
+  const zvoleny = vybranyRok ? roky.find((r) => String(r.rok) === String(vybranyRok)) : null;
+
+  // Bez filtru se vypíšou všechny děravé ročníky. Se zvoleným ročníkem jen ten —
+  // kdo si vyfiltroval rok 2024, nepotřebuje varování o roce 2025 a jenom by ho
+  // to naučilo poznámku přehlížet.
+  const vypsat = vybranyRok ? (zvoleny?.neuplny ? [zvoleny] : []) : roky.filter((r) => r.neuplny);
+
+  const vety = vypsat.map((r) =>
+    `<strong>Rok ${r.rok} zdroj nezveřejnil celý:</strong> ${esc(r.duvody.join('; '))}.`
+    + (r.platnostDo ? ` CityVizor u něj uvádí data platná k ${fmtDatum(r.platnostDo)}.` : ''));
+
+  // Zastaralost se týká konce řady. Ve vyfiltrovaném uzavřeném ročníku nic
+  // neznamená, tam prostě nic dalšího přijít nemá.
+  const stari = stariDniOd(pokryti.posledniFaktura);
+  if (stari != null && stari > DNI_DO_ZASTARANI && (!zvoleny || zvoleny.probihajici)) {
+    vety.push(`<strong>Poslední faktura je z ${fmtDatum(pokryti.posledniFaktura)}</strong>, tedy `
+      + `${fmtCislo(stari)} dní stará — novější dávku radnice na CityVizor zatím nenahrála.`);
+  }
+
+  if (!vety.length) return '';
+  if (vypsat.length && !vybranyRok) {
+    vety.push('Součty a žebříčky na této stránce proto nejsou za celé období úplné.');
+  }
+
+  return `<div class="poznamka varovani">
+    ${vety.map((v) => `<p>${v}</p>`).join('')}
+    <p class="drobne">Faktury se přebírají z CityVizoru beze změny a nic se nedopočítává.
+    Co chybí tady, chybí i tam.</p>
+  </div>`;
+}
+
+/** Stáří data v celých dnech. Počítá se až v prohlížeči, ať nestárne s buildem. */
+function stariDniOd(datum) {
+  if (!datum) return null;
+  const t = Date.parse(`${datum}T00:00:00Z`);
+  if (Number.isNaN(t)) return null;
+  return Math.floor((Date.now() - t) / 864e5);
 }
 
 const radekFaktura = (f) => `

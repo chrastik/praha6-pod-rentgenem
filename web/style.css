@@ -214,6 +214,12 @@ h2{font-size:1.25rem;letter-spacing:-.01em;margin:2em 0 .6em}
   padding:10px 14px;margin:0 0 20px;max-width:80ch;line-height:1.55;
 }
 .poznamka strong{color:var(--ink)}
+/* Poznámka o dírách ve zdroji nese víc odstavců a musí být na první pohled
+   poznat, že to není běžná vysvětlivka, ale varování o neúplných datech. */
+.poznamka p{margin:0 0 .55em}
+.poznamka p:last-child{margin-bottom:0}
+.poznamka p .drobne,.poznamka p.drobne{margin-top:.55em}
+.poznamka.varovani{border-left-color:var(--rust);background:var(--rust-soft)}
 
 .subjekty{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule)}
 .subjekt{
