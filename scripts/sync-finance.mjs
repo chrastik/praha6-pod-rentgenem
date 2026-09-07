@@ -5,6 +5,7 @@
  */
 import { fetchJson } from './lib/http.mjs';
 import { writeDataset } from './lib/util.mjs';
+import { pokrytiFaktur } from './lib/finance.mjs';
 
 const API = 'https://cityvizor.praha.eu/api/public';
 const SLUG = 'praha6';
@@ -100,9 +101,18 @@ await writeDataset('rozpocet', Object.entries(rozpocet).map(([rok, polozky]) => 
   rok: Number(rok), polozky,
 })), { profil: { id, ico: profil.ico ?? null, slug: SLUG }, roky: dostupneRoky });
 
+// Kolik z každého roku zdroj vůbec zveřejnil. Bez tohohle web ukazuje děravý
+// ročník jako hotové číslo — za rok 2025 přestal CityVizor dostávat export
+// z účetnictví na konci ledna a nikdo si toho rok nevšiml.
+const pokryti = pokrytiFaktur(roky, fakturyNormalizovane);
+for (const r of pokryti.roky) {
+  if (r.neuplny) console.warn(`  ! rok ${r.rok} je ve zdroji neúplný: ${r.duvody.join('; ')}`);
+}
+
 await writeDataset('faktury', fakturyNormalizovane, {
   profil: { id, slug: SLUG },
   shodnychRadku: shodnych,
+  pokryti,
   souhrn: {
     celkemVydaje,
     rozsah: {
