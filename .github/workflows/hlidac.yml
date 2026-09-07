@@ -1,0 +1,68 @@
+name: Hlídač zdrojů
+# Kontroluje, jestli zdroje pořád něco přinášejí. Scraper umí měsíce běžet
+# zeleně a nevozit nic nového — u faktur z CityVizoru se tak přehlédl celý
+# chybějící ročník 2025. Když se něco zasekne, drží se o tom jedno otevřené
+# issue, které se každý týden přepíše na aktuální stav; jakmile se zdroj rozjede,
+# issue se samo zavře.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.hlidac']
+  schedule:
+    - cron: '25 7 * * 1'   # pondělí, po týdenní aktualizaci (ta jede ve 4:40)
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  hlidat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Kontrola čerstvosti zdrojů
+        id: kontrola
+        run: |
+          set +e
+          node scripts/hlidac-zdroju.mjs | tee vypis.txt
+          echo "spi=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          node scripts/hlidac-zdroju.mjs --markdown > telo.md || true
+
+      # Jedno issue, ne nové každý týden. Titulek je klíč, podle kterého se hledá.
+      - name: Založit nebo přepsat issue
+        if: steps.kontrola.outputs.spi != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITULEK: 'Zdroj nepřináší nová data'
+        run: |
+          CISLO=$(gh issue list --state open --search "\"$TITULEK\" in:title" \
+                    --json number,title \
+                    --jq "[.[] | select(.title == \"$TITULEK\")][0].number // empty")
+          if [ -n "$CISLO" ]; then
+            gh issue edit "$CISLO" --body-file telo.md
+            echo "aktualizováno issue #$CISLO"
+          else
+            gh issue create --title "$TITULEK" --body-file telo.md --label "data" \
+              || gh issue create --title "$TITULEK" --body-file telo.md
+          fi
+
+      # Zdroje se rozjely — issue nemá důvod dál viset.
+      - name: Zavřít issue, když je zase všechno v pořádku
+        if: steps.kontrola.outputs.spi == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITULEK: 'Zdroj nepřináší nová data'
+        run: |
+          CISLO=$(gh issue list --state open --search "\"$TITULEK\" in:title" \
+                    --json number,title \
+                    --jq "[.[] | select(.title == \"$TITULEK\")][0].number // empty")
+          if [ -n "$CISLO" ]; then
+            gh issue close "$CISLO" --comment "Všechny zdroje zase přinášejí nová data."
+            echo "zavřeno issue #$CISLO"
+          fi
