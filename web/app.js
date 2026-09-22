@@ -219,6 +219,7 @@ async function domu() {
     <div class="seznam">
       ${odkaz('#/usneseni', 'Usnesení a jednání', 'Rada i zastupitelstvo, filtr podle orgánu, roku a tématu, fulltext v plném znění.')}
       ${odkaz('#/interpelace', 'Interpelace', 'Na co se zastupitelé a občané ptali na zasedání — plný přepis, odpověď i přílohy, rok po roce.')}
+      ${odkaz(MAPA_PODNETU, 'Mapa podnětů', 'Samostatný projekt: část interpelací zanesená do mapy Prahy spolu s podněty od veřejnosti. Poloha bodů je přibližná, podle čtvrti.', true)}
       ${odkaz('#/finance', 'Peníze', 'Položkový rozpočet a jednotlivé faktury z CityVizoru.')}
       ${odkaz('#/smlouvy', 'Registr smluv', 'Smlouvy městské části podle IČO 00063703.')}
       ${odkaz('#/zakazky', 'Veřejné zakázky', 'Co se soutěžilo, kdo vyhrál, za kolik se to podepsalo a jak cenu změnily dodatky.')}
@@ -229,9 +230,17 @@ async function domu() {
     </div>`;
 }
 
-const odkaz = (href, nadpis, popis) => `
-  <div class="polozka"><div class="meta">→</div><div>
-    <h3><a href="${href}">${esc(nadpis)}</a></h3>
+/**
+ * Adresa mapy podnětů. Je to cizí projekt na vlastním serveru, ne část tohohle
+ * webu — proto na jediném místě, ať se to při případné změně nehledá po kódu.
+ */
+const MAPA_PODNETU = 'https://mapa.praha6podrentgenem.cz/';
+
+// `vnejsi` odliší cíl mimo tenhle web: otevře se v novém panelu a čtenář to
+// pozná i z popisku, aby ho nepřekvapilo, že opustil portál.
+const odkaz = (href, nadpis, popis, vnejsi = false) => `
+  <div class="polozka"><div class="meta">${vnejsi ? '↗' : '→'}</div><div>
+    <h3><a href="${href}"${vnejsi ? ' target="_blank" rel="noopener"' : ''}>${esc(nadpis)}</a></h3>
     <div class="radek">${esc(popis)}</div>
   </div></div>`;
 
@@ -1440,7 +1449,11 @@ const POZNAMKA_INTERPELACE = `
   <strong>Jména občanů zkracujeme na iniciály</strong>, a to i uvnitř přepisů;
   zastupitelé a radní zůstávají pod celým jménem, protože vystupují ve veřejné
   funkci. Interpelace bez odpovědi nemusí znamenat, že radnice neodpověděla:
-  odpověď mohla zaznít na místě a do portálu se nedostat.</p>`;
+  odpověď mohla zaznít na místě a do portálu se nedostat.
+  <strong>Část interpelací je zanesená i do <a href="${MAPA_PODNETU}" target="_blank" rel="noopener">mapy podnětů</a></strong>,
+  což je samostatný projekt, kam veřejnost přidává vlastní podněty. Poloha bodu
+  je tam jen přibližná — sedí na čtvrti, ne na adrese, protože zdroj adresu
+  neuvádí.</p>`;
 
 /**
  * Typ přílohy pro čtenáře. MIME z portálu je u dokumentů Office nesnesitelný
