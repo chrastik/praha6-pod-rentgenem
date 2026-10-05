@@ -1,5 +1,5 @@
 {
-  "aktualizovano": "2026-10-01T13:03:43.372Z",
+  "aktualizovano": "2026-10-05T11:49:06.094Z",
   "usneseni": {
     "pocet": 27984,
     "roky": [
@@ -40,8 +40,8 @@
   },
   "datasety": {
     "zapisy": {
-      "pocet": 4431,
-      "aktualizovano": "2026-09-28T11:12:14.002Z"
+      "pocet": 4432,
+      "aktualizovano": "2026-10-05T11:48:52.596Z"
     },
     "smlouvy": {
       "pocet": 13600,
@@ -49,11 +49,11 @@
     },
     "faktury": {
       "pocet": 18538,
-      "aktualizovano": "2026-09-28T11:12:24.079Z"
+      "aktualizovano": "2026-10-05T11:49:02.949Z"
     },
     "rozpocet": {
       "pocet": 6,
-      "aktualizovano": "2026-09-28T11:12:24.033Z"
+      "aktualizovano": "2026-10-05T11:49:02.893Z"
     },
     "deska": {
       "pocet": 131,
@@ -69,11 +69,11 @@
     },
     "dotace": {
       "pocet": 1353,
-      "aktualizovano": "2026-10-01T13:03:43.010Z"
+      "aktualizovano": "2026-10-05T11:49:06.002Z"
     },
     "zakazky-prehled": {
       "pocet": 471,
-      "aktualizovano": "2026-10-01T13:03:43.365Z"
+      "aktualizovano": "2026-10-05T11:49:06.088Z"
     },
     "interpelace": {
       "pocet": 824,
