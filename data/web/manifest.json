@@ -1,5 +1,5 @@
 {
-  "aktualizovano": "2026-11-11T12:56:12.555Z",
+  "aktualizovano": "2026-11-12T15:02:49.010Z",
   "usneseni": {
     "pocet": 27984,
     "roky": [
@@ -69,15 +69,15 @@
     },
     "dotace": {
       "pocet": 1353,
-      "aktualizovano": "2026-11-11T12:56:12.461Z"
+      "aktualizovano": "2026-11-12T15:02:48.898Z"
     },
     "zakazky-prehled": {
       "pocet": 477,
-      "aktualizovano": "2026-11-11T12:56:12.549Z"
+      "aktualizovano": "2026-11-12T15:02:49.004Z"
     },
     "interpelace": {
       "pocet": 824,
-      "aktualizovano": "2026-11-05T14:31:41.115Z"
+      "aktualizovano": "2026-11-12T15:02:46.773Z"
     }
   }
 }
